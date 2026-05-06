@@ -19,10 +19,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   sourceRoot = ".";
 
-  dontBuild = true;
-  dontStrip = true;
-  strictDeps = true;
-
   buildInputs = [
     gcc-unwrapped
     zlib
@@ -31,6 +27,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   nativeBuildInputs = [
     autoPatchelfHook
   ];
+
+  dontBuild = true;
+  dontStrip = true;
+  strictDeps = true;
 
   installPhase = ''
     runHook preInstall

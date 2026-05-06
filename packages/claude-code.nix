@@ -21,15 +21,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     url = builtins.replaceStrings [ "{version}" ] [ finalAttrs.version ] urlTemplate;
   };
 
-  dontBuild = true;
-  dontStrip = true;
-  dontUnpack = true;
-  strictDeps = true;
-
   nativeBuildInputs = [
     autoPatchelfHook
     makeWrapper
   ];
+
+  dontBuild = true;
+  dontStrip = true;
+  dontUnpack = true;
+  strictDeps = true;
 
   installPhase = ''
     runHook preInstall

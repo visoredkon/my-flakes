@@ -16,11 +16,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     url = builtins.replaceStrings [ "{version}" ] [ finalAttrs.version ] urlTemplate;
   };
 
-  dontBuild = true;
-  dontStrip = true;
-  dontUnpack = true;
-  strictDeps = true;
-
   buildInputs = [
     gcc-unwrapped.lib
   ];
@@ -28,6 +23,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   nativeBuildInputs = [
     autoPatchelfHook
   ];
+
+  dontBuild = true;
+  dontStrip = true;
+  dontUnpack = true;
+  strictDeps = true;
 
   installPhase = ''
     runHook preInstall

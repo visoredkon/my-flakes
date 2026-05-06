@@ -33,8 +33,8 @@ writeShellApplication {
 
     COMMIT=false
     PUSH=false
-    updated_packages=()
     updates=()
+    updated_packages=()
 
     display_version() {
       if [[ -n "$1" ]]; then
@@ -74,14 +74,14 @@ writeShellApplication {
         COMMIT=true
         shift
         ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
       --push)
         COMMIT=true
         PUSH=true
         shift
-        ;;
-      -h | --help)
-        usage
-        exit 0
         ;;
       *)
         usage
@@ -91,9 +91,9 @@ writeShellApplication {
     done
 
     meta='${metaJson}'
-    pkgs=$(jq -r 'keys[]' <<<"$meta")
+    package_names=$(jq -r 'keys[]' <<<"$meta")
 
-    for pkg in $pkgs; do
+    for pkg in $package_names; do
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
       releaseFile="releases/$pkg/release.nix"

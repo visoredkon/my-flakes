@@ -8,28 +8,13 @@
   outputs =
     { nixpkgs, self }:
     let
-      claudeCode = pkgs.callPackage ./packages/claude-code.nix {
-        inherit (packageMetadata."claude-code") release urlTemplate;
-      };
-
-      codebaseMemoryMcp = pkgs.callPackage ./packages/codebase-memory-mcp.nix {
-        inherit (packageMetadata."codebase-memory-mcp") release urlTemplate;
-      };
-
-      copilotCli = pkgs.callPackage ./packages/copilot-cli.nix {
-        inherit (packageMetadata."copilot-cli") release urlTemplate;
-      };
-
-      forgecode = pkgs.callPackage ./packages/forgecode.nix {
-        inherit (packageMetadata.forgecode) release urlTemplate;
-      };
-
       formatTargets = "apps/*.nix packages/*.nix releases/*/release.nix flake.nix";
-
       mkApp = program: {
         inherit program;
         type = "app";
       };
+      pkgs = import nixpkgs { inherit system; };
+      system = "x86_64-linux";
 
       packageMetadata = {
         "claude-code" = rec {
@@ -50,15 +35,29 @@
           urlTemplate = "${baseUrl}/v{version}/copilot-linux-x64.tar.gz";
         };
 
-        forgecode = rec {
+        "forgecode" = rec {
           baseUrl = "https://github.com/tailcallhq/forgecode/releases/download";
           release = import ./releases/forgecode/release.nix;
           urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
         };
       };
 
-      pkgs = import nixpkgs { inherit system; };
-      system = "x86_64-linux";
+      claudeCode = pkgs.callPackage ./packages/claude-code.nix {
+        inherit (packageMetadata."claude-code") release urlTemplate;
+      };
+
+      codebaseMemoryMcp = pkgs.callPackage ./packages/codebase-memory-mcp.nix {
+        inherit (packageMetadata."codebase-memory-mcp") release urlTemplate;
+      };
+
+      copilotCli = pkgs.callPackage ./packages/copilot-cli.nix {
+        inherit (packageMetadata."copilot-cli") release urlTemplate;
+      };
+
+      forgecode = pkgs.callPackage ./packages/forgecode.nix {
+        inherit (packageMetadata."forgecode") release urlTemplate;
+      };
+
       updateRelease = pkgs.callPackage ./apps/update-release.nix { inherit packageMetadata; };
     in
     {
@@ -66,8 +65,8 @@
         "claude-code" = mkApp "${claudeCode}/bin/claude";
         "codebase-memory-mcp" = mkApp "${codebaseMemoryMcp}/bin/codebase-memory-mcp";
         "copilot-cli" = mkApp "${copilotCli}/bin/copilot";
-        forgecode = mkApp "${forgecode}/bin/forgecode";
-        update-release = mkApp "${updateRelease}/bin/update-release";
+        "forgecode" = mkApp "${forgecode}/bin/forgecode";
+        "update-release" = mkApp "${updateRelease}/bin/update-release";
       };
 
       checks.${system}.format =
@@ -93,14 +92,14 @@
           "claude-code" = packagesForSystem."claude-code";
           "codebase-memory-mcp" = packagesForSystem."codebase-memory-mcp";
           "copilot-cli" = packagesForSystem."copilot-cli";
-          forgecode = packagesForSystem.forgecode;
+          "forgecode" = packagesForSystem."forgecode";
         };
 
       packages.${system} = {
         "claude-code" = claudeCode;
         "codebase-memory-mcp" = codebaseMemoryMcp;
         "copilot-cli" = copilotCli;
-        forgecode = forgecode;
+        "forgecode" = forgecode;
       };
     };
 }
