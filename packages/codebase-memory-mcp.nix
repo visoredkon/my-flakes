@@ -1,13 +1,15 @@
 {
   autoPatchelfHook,
   fetchurl,
+  gcc-unwrapped,
   release,
   stdenvNoCC,
   urlTemplate,
+  zlib,
 }:
 
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "gortex";
+  pname = "codebase-memory-mcp";
   version = release.version;
 
   src = fetchurl {
@@ -21,6 +23,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   dontStrip = true;
   strictDeps = true;
 
+  buildInputs = [
+    gcc-unwrapped
+    zlib
+  ];
+
   nativeBuildInputs = [
     autoPatchelfHook
   ];
@@ -28,7 +35,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 gortex "$out/bin/gortex"
+    install -Dm755 codebase-memory-mcp "$out/bin/codebase-memory-mcp"
 
     runHook postInstall
   '';
