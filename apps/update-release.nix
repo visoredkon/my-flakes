@@ -90,6 +90,8 @@ writeShellApplication {
       esac
     done
 
+    git pull
+
     meta='${metaJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
 
