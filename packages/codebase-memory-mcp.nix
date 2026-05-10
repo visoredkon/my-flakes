@@ -1,36 +1,22 @@
 {
   autoPatchelfHook,
-  fetchurl,
   gcc-unwrapped,
+  mkPrebuilt,
   release,
-  stdenvNoCC,
   urlTemplate,
   zlib,
 }:
 
-stdenvNoCC.mkDerivation (finalAttrs: {
+mkPrebuilt {
   pname = "codebase-memory-mcp";
-  version = release.version;
-
-  src = fetchurl {
-    sha256 = release.sha256;
-    url = builtins.replaceStrings [ "{version}" ] [ finalAttrs.version ] urlTemplate;
-  };
-
-  sourceRoot = ".";
+  inherit release urlTemplate;
 
   buildInputs = [
     gcc-unwrapped
     zlib
   ];
 
-  nativeBuildInputs = [
-    autoPatchelfHook
-  ];
-
   dontBuild = true;
-  dontStrip = true;
-  strictDeps = true;
 
   installPhase = ''
     runHook preInstall
@@ -39,4 +25,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     runHook postInstall
   '';
-})
+
+  nativeBuildInputs = [
+    autoPatchelfHook
+  ];
+
+  sourceRoot = ".";
+}

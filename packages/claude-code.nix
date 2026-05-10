@@ -1,35 +1,22 @@
 {
   autoPatchelfHook,
   bubblewrap,
-  fetchurl,
   lib,
   makeWrapper,
+  mkPrebuilt,
   procps,
   release,
   ripgrep,
   socat,
-  stdenvNoCC,
   urlTemplate,
 }:
 
-stdenvNoCC.mkDerivation (finalAttrs: {
+mkPrebuilt {
   pname = "claude-code";
-  version = release.version;
-
-  src = fetchurl {
-    sha256 = release.sha256;
-    url = builtins.replaceStrings [ "{version}" ] [ finalAttrs.version ] urlTemplate;
-  };
-
-  nativeBuildInputs = [
-    autoPatchelfHook
-    makeWrapper
-  ];
+  inherit release urlTemplate;
 
   dontBuild = true;
-  dontStrip = true;
   dontUnpack = true;
-  strictDeps = true;
 
   installPhase = ''
     runHook preInstall
@@ -52,4 +39,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     runHook postInstall
   '';
-})
+
+  nativeBuildInputs = [
+    autoPatchelfHook
+    makeWrapper
+  ];
+}

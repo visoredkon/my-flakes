@@ -98,7 +98,7 @@ writeShellApplication {
     for pkg in $package_names; do
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
-      releaseFile="releases/$pkg/release.nix"
+      releaseFile="releases/$pkg.nix"
 
       echo "==> Updating $pkg..." >&2
 
@@ -109,6 +109,9 @@ writeShellApplication {
         version="''${tag#v}"
       elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
         version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+      elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
+        manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
+        version=$(jq -r '.version' <<<"$manifest")
       else
         echo "Automatic version discovery not supported for $pkg" >&2
         continue

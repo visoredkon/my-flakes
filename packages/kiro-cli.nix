@@ -3,30 +3,35 @@
   gcc-unwrapped,
   mkPrebuilt,
   release,
+  unzip,
   urlTemplate,
 }:
 
 mkPrebuilt {
-  pname = "copilot-cli";
+  pname = "kiro-cli";
   inherit release urlTemplate;
 
   buildInputs = [
     gcc-unwrapped.lib
   ];
 
-  dontBuild = true;
-
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 copilot "$out/bin/copilot"
+    mkdir -p $out/bin
+    install -Dm755 kirocli/bin/kiro-cli "$out/bin/kiro-cli"
+    install -Dm755 kirocli/bin/kiro-cli-chat "$out/bin/kiro-cli-chat"
+    ln -s "$out/bin/kiro-cli" "$out/bin/q"
 
     runHook postInstall
   '';
 
   nativeBuildInputs = [
     autoPatchelfHook
+    unzip
   ];
 
-  sourceRoot = ".";
+  unpackPhase = ''
+    unzip $src
+  '';
 }

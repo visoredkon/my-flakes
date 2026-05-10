@@ -8,66 +8,73 @@
   outputs =
     { nixpkgs, self }:
     let
-      formatTargets = "apps/*.nix packages/*.nix releases/*/release.nix flake.nix";
+      formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
+
+      generatedPackages = builtins.mapAttrs (
+        name: meta:
+        pkgs.callPackage ./packages/${name}.nix {
+          inherit mkPrebuilt;
+          inherit (meta) release urlTemplate;
+        }
+      ) packageMetadata;
+
       mkApp = program: {
         inherit program;
         type = "app";
       };
-      pkgs = import nixpkgs { inherit system; };
-      system = "x86_64-linux";
 
-      packageMetadata = {
+      mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
+
+      packageMetadata = builtins.mapAttrs (
+        name: info:
+        info
+        // {
+          release = import ./releases/${name}.nix;
+        }
+      ) packagesConfig;
+
+      packagesConfig = {
         "claude-code" = rec {
           baseUrl = "https://downloads.claude.ai/claude-code-releases";
-          release = import ./releases/claude-code/release.nix;
+          binName = "claude";
           urlTemplate = "${baseUrl}/{version}/linux-x64/claude";
         };
-
         "codebase-memory-mcp" = rec {
           baseUrl = "https://github.com/DeusData/codebase-memory-mcp/releases/download";
-          release = import ./releases/codebase-memory-mcp/release.nix;
+          binName = "codebase-memory-mcp";
           urlTemplate = "${baseUrl}/v{version}/codebase-memory-mcp-ui-linux-amd64.tar.gz";
         };
-
         "copilot-cli" = rec {
           baseUrl = "https://github.com/github/copilot-cli/releases/download";
-          release = import ./releases/copilot-cli/release.nix;
+          binName = "copilot";
           urlTemplate = "${baseUrl}/v{version}/copilot-linux-x64.tar.gz";
         };
-
         "forgecode" = rec {
           baseUrl = "https://github.com/tailcallhq/forgecode/releases/download";
-          release = import ./releases/forgecode/release.nix;
+          binName = "forgecode";
           urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
+        };
+        "kiro-cli" = rec {
+          baseUrl = "https://prod.download.cli.kiro.dev/stable";
+          binName = "kiro-cli";
+          urlTemplate = "${baseUrl}/{version}/kirocli-x86_64-linux.zip";
         };
       };
 
-      claudeCode = pkgs.callPackage ./packages/claude-code.nix {
-        inherit (packageMetadata."claude-code") release urlTemplate;
-      };
+      pkgs = import nixpkgs { inherit system; };
 
-      codebaseMemoryMcp = pkgs.callPackage ./packages/codebase-memory-mcp.nix {
-        inherit (packageMetadata."codebase-memory-mcp") release urlTemplate;
-      };
-
-      copilotCli = pkgs.callPackage ./packages/copilot-cli.nix {
-        inherit (packageMetadata."copilot-cli") release urlTemplate;
-      };
-
-      forgecode = pkgs.callPackage ./packages/forgecode.nix {
-        inherit (packageMetadata."forgecode") release urlTemplate;
-      };
+      system = "x86_64-linux";
 
       updateRelease = pkgs.callPackage ./apps/update-release.nix { inherit packageMetadata; };
     in
     {
-      apps.${system} = {
-        "claude-code" = mkApp "${claudeCode}/bin/claude";
-        "codebase-memory-mcp" = mkApp "${codebaseMemoryMcp}/bin/codebase-memory-mcp";
-        "copilot-cli" = mkApp "${copilotCli}/bin/copilot";
-        "forgecode" = mkApp "${forgecode}/bin/forgecode";
-        "update-release" = mkApp "${updateRelease}/bin/update-release";
-      };
+      apps.${system} =
+        (builtins.mapAttrs (
+          name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}"
+        ) packageMetadata)
+        // {
+          "update-release" = mkApp "${updateRelease}/bin/update-release";
+        };
 
       checks.${system}.format =
         pkgs.runCommand "check-format"
@@ -85,21 +92,8 @@
 
       overlays.default =
         _: prev:
-        let
-          packagesForSystem = self.packages.${prev.stdenv.hostPlatform.system};
-        in
-        {
-          "claude-code" = packagesForSystem."claude-code";
-          "codebase-memory-mcp" = packagesForSystem."codebase-memory-mcp";
-          "copilot-cli" = packagesForSystem."copilot-cli";
-          "forgecode" = packagesForSystem."forgecode";
-        };
+        builtins.intersectAttrs packagesConfig (self.packages.${prev.stdenv.hostPlatform.system} or { });
 
-      packages.${system} = {
-        "claude-code" = claudeCode;
-        "codebase-memory-mcp" = codebaseMemoryMcp;
-        "copilot-cli" = copilotCli;
-        "forgecode" = forgecode;
-      };
+      packages.${system} = generatedPackages;
     };
 }
