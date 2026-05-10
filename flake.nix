@@ -59,6 +59,11 @@
           binName = "kiro-cli";
           urlTemplate = "${baseUrl}/{version}/kirocli-x86_64-linux.zip";
         };
+        "opencode" = rec {
+          baseUrl = "https://github.com/anomalyco/opencode/releases/download";
+          binName = "opencode";
+          urlTemplate = "${baseUrl}/v{version}/opencode-linux-x64.tar.gz";
+        };
       };
 
       pkgs = import nixpkgs { inherit system; };
