@@ -54,15 +54,15 @@
           binName = "forgecode";
           urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
         };
-        "gemini-cli" = rec {
-          baseUrl = "https://github.com/google-gemini/gemini-cli/releases/download";
-          binName = "gemini";
-          urlTemplate = "${baseUrl}/v{version}/gemini-cli-bundle.zip";
-        };
         "kiro-cli" = rec {
           baseUrl = "https://prod.download.cli.kiro.dev/stable";
           binName = "kiro-cli";
           urlTemplate = "${baseUrl}/{version}/kirocli-x86_64-linux.zip";
+        };
+        "mise" = rec {
+          baseUrl = "https://github.com/jdx/mise/releases/download";
+          binName = "mise";
+          urlTemplate = "${baseUrl}/v{version}/mise-v{version}-linux-x64.tar.gz";
         };
         "opencode" = rec {
           baseUrl = "https://github.com/anomalyco/opencode/releases/download";
