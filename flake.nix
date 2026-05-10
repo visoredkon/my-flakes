@@ -54,6 +54,11 @@
           binName = "forgecode";
           urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
         };
+        "gemini-cli" = rec {
+          baseUrl = "https://github.com/google-gemini/gemini-cli/releases/download";
+          binName = "gemini";
+          urlTemplate = "${baseUrl}/v{version}/gemini-cli-bundle.zip";
+        };
         "kiro-cli" = rec {
           baseUrl = "https://prod.download.cli.kiro.dev/stable";
           binName = "kiro-cli";
