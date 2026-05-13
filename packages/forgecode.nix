@@ -1,7 +1,6 @@
 {
-  autoPatchelfHook,
-  gcc-unwrapped,
   mkPrebuilt,
+  pkgs,
   release,
   urlTemplate,
 }:
@@ -10,7 +9,7 @@ mkPrebuilt {
   pname = "forgecode";
   inherit release urlTemplate;
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
 
@@ -25,7 +24,7 @@ mkPrebuilt {
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
   ];
 }

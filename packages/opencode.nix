@@ -1,6 +1,6 @@
 {
-  autoPatchelfHook,
   mkPrebuilt,
+  pkgs,
   release,
   urlTemplate,
 }:
@@ -19,7 +19,7 @@ mkPrebuilt {
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
   ];
 

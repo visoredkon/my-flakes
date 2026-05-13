@@ -1,9 +1,7 @@
 {
-  autoPatchelfHook,
-  gcc-unwrapped,
   mkPrebuilt,
+  pkgs,
   release,
-  unzip,
   urlTemplate,
 }:
 
@@ -11,7 +9,7 @@ mkPrebuilt {
   pname = "kiro-cli";
   inherit release urlTemplate;
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
 
@@ -26,7 +24,7 @@ mkPrebuilt {
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
     unzip
   ];

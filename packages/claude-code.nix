@@ -1,13 +1,7 @@
 {
-  autoPatchelfHook,
-  bubblewrap,
-  lib,
-  makeWrapper,
   mkPrebuilt,
-  procps,
+  pkgs,
   release,
-  ripgrep,
-  socat,
   urlTemplate,
 }:
 
@@ -29,18 +23,21 @@ mkPrebuilt {
       --set USE_BUILTIN_RIPGREP 0 \
       --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
       --prefix PATH : ${
-        lib.makeBinPath [
-          bubblewrap
-          procps
-          ripgrep
-          socat
-        ]
+        pkgs.lib.makeBinPath (
+          with pkgs;
+          [
+            bubblewrap
+            procps
+            ripgrep
+            socat
+          ]
+        )
       }
 
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
     makeWrapper
   ];

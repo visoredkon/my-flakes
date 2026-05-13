@@ -1,17 +1,15 @@
 {
-  autoPatchelfHook,
-  gcc-unwrapped,
   mkPrebuilt,
+  pkgs,
   release,
   urlTemplate,
-  zlib,
 }:
 
 mkPrebuilt {
   pname = "codebase-memory-mcp";
   inherit release urlTemplate;
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     gcc-unwrapped
     zlib
   ];
@@ -26,7 +24,7 @@ mkPrebuilt {
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
   ];
 

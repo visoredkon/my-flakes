@@ -1,26 +1,19 @@
 {
-  coreutils,
-  curl,
-  gawk,
-  git,
-  jq,
-  lib,
-  nix,
   packageMetadata,
-  writeShellApplication,
+  pkgs,
 }:
 
 let
   metaJson = builtins.toJSON (
-    lib.mapAttrs (_: v: {
+    pkgs.lib.mapAttrs (_: v: {
       baseUrl = v.baseUrl;
       urlTemplate = v.urlTemplate;
     }) packageMetadata
   );
 in
-writeShellApplication {
+pkgs.writeShellApplication {
   name = "update-release";
-  runtimeInputs = [
+  runtimeInputs = with pkgs; [
     coreutils
     curl
     gawk

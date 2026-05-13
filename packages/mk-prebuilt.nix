@@ -1,7 +1,4 @@
-{
-  fetchurl,
-  stdenvNoCC,
-}:
+{ pkgs }:
 
 {
   pname,
@@ -10,8 +7,8 @@
   ...
 }@args:
 
-stdenvNoCC.mkDerivation (
-  (removeAttrs args [
+pkgs.stdenvNoCC.mkDerivation (
+  (builtins.removeAttrs args [
     "pname"
     "release"
     "urlTemplate"
@@ -21,7 +18,7 @@ stdenvNoCC.mkDerivation (
 
     dontStrip = true;
 
-    src = fetchurl {
+    src = pkgs.fetchurl {
       sha256 = release.sha256;
       url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
     };

@@ -1,7 +1,6 @@
 {
-  autoPatchelfHook,
-  gcc-unwrapped,
   mkPrebuilt,
+  pkgs,
   release,
   urlTemplate,
 }:
@@ -10,7 +9,7 @@ mkPrebuilt {
   pname = "copilot-cli";
   inherit release urlTemplate;
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
 
@@ -24,7 +23,7 @@ mkPrebuilt {
     runHook postInstall
   '';
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     autoPatchelfHook
   ];
 

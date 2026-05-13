@@ -1,12 +1,11 @@
 {
   formatTargets,
-  nixfmt,
-  writeShellApplication,
+  pkgs,
 }:
 
-writeShellApplication {
+pkgs.writeShellApplication {
   name = "fmt";
-  runtimeInputs = [ nixfmt ];
+  runtimeInputs = with pkgs; [ nixfmt ];
   text = ''
     set -euo pipefail
 
