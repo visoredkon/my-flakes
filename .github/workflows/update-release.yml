@@ -35,9 +35,9 @@ jobs:
       - name: install-nix
         uses: cachix/install-nix-action@v31
 
+      - name: update my-flakes
+        run: nix run .#update-release -- --push
+
       - name: update hytale-launcher
         run: nix run .#update-release -- --push
         working-directory: hytale-launcher-flake
-
-      - name: update my-flakes
-        run: nix run .#update-release -- --push
