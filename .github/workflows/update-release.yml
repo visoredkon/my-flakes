@@ -11,20 +11,33 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-slim
+    env:
+      GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+      GIT_AUTHOR_NAME: ${{ github.actor }}
     steps:
       - name: checkout
         uses: actions/checkout@v6
 
-      - name: install-nix
-        uses: cachix/install-nix-action@v31
+      - name: checkout hytale-launcher-flake
+        uses: actions/checkout@v6
+        with:
+          path: hytale-launcher-flake
+          repository: visoredkon/hytale-launcher-flake
+          token: ${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}
 
       - name: config-git
         run: |
-          git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git -C hytale-launcher-flake remote set-url origin \
+            https://x-access-token:${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}@github.com/visoredkon/hytale-launcher-flake.git
 
-      - name: update-release
-        env:
-          GIT_AUTHOR_NAME: ${{ github.actor }}
-          GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+      - name: install-nix
+        uses: cachix/install-nix-action@v31
+
+      - name: update hytale-launcher
+        run: nix run .#update-release -- --push
+        working-directory: hytale-launcher-flake
+
+      - name: update my-flakes
         run: nix run .#update-release -- --push
