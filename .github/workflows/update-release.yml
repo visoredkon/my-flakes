@@ -27,8 +27,8 @@ jobs:
 
       - name: config-git
         run: |
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
           git -C hytale-launcher-flake remote set-url origin \
             https://x-access-token:${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}@github.com/visoredkon/hytale-launcher-flake.git
 
