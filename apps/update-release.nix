@@ -5,10 +5,7 @@
 
 let
   metaJson = builtins.toJSON (
-    pkgs.lib.mapAttrs (_: v: {
-      baseUrl = v.baseUrl;
-      urlTemplate = v.urlTemplate;
-    }) packageMetadata
+    pkgs.lib.mapAttrs (_: v: { inherit (v) baseUrl urlTemplate; }) packageMetadata
   );
 in
 pkgs.writeShellApplication {
@@ -18,6 +15,7 @@ pkgs.writeShellApplication {
     curl
     gawk
     git
+    gnutar
     jq
     nix
   ];
@@ -102,6 +100,9 @@ pkgs.writeShellApplication {
         version="''${tag#v}"
       elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
         version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+      elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
+        metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+        version=$(jq -r '.currentRelease' <<<"$metadata")
       elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
         manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
         version=$(jq -r '.version' <<<"$manifest")
@@ -134,11 +135,23 @@ pkgs.writeShellApplication {
       fi
 
       sha=$(sha256sum "$tmp" | awk '{print $1}')
+
+      vscodeVersion=
+      if [[ "$pkg" == "kiro" ]]; then
+        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" | jq -r '.vsCodeVersion')
+      fi
+
       rm -f "$tmp"
 
-      cat > "$releaseFile" <<EO
+      if [[ "$pkg" == "kiro" ]]; then
+        cat > "$releaseFile" <<EO
+    { sha256 = "$sha"; version = "$version"; vscodeVersion = "$vscodeVersion"; }
+    EO
+      else
+        cat > "$releaseFile" <<EO
     { sha256 = "$sha"; version = "$version"; }
     EO
+      fi
 
       updates+=("$pkg:$(display_version "$current_version"):$version")
       updated_packages+=("$pkg")

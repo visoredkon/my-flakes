@@ -54,6 +54,11 @@
           binName = "forgecode";
           urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
         };
+        "kiro" = rec {
+          baseUrl = "https://prod.download.desktop.kiro.dev";
+          binName = "kiro";
+          urlTemplate = "${baseUrl}/releases/stable/linux-x64/signed/{version}/tar/kiro-ide-{version}-stable-linux-x64.tar.gz";
+        };
         "kiro-cli" = rec {
           baseUrl = "https://prod.download.cli.kiro.dev/stable";
           binName = "kiro-cli";
@@ -71,7 +76,10 @@
         };
       };
 
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfreePredicate = pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "kiro" ];
+      };
 
       system = "x86_64-linux";
 

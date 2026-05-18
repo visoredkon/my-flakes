@@ -19,11 +19,11 @@ pkgs.stdenvNoCC.mkDerivation (
     dontStrip = true;
 
     src = pkgs.fetchurl {
-      sha256 = release.sha256;
+      inherit (release) sha256;
       url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
     };
 
     strictDeps = true;
-    version = release.version;
+    inherit (release) version;
   }
 )
