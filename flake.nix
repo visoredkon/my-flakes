@@ -34,6 +34,11 @@
       ) packagesConfig;
 
       packagesConfig = {
+        "antigravity" = rec {
+          baseUrl = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
+          binName = "antigravity";
+          urlTemplate = "";
+        };
         "claude-code" = rec {
           baseUrl = "https://downloads.claude.ai/claude-code-releases";
           binName = "claude";
@@ -78,7 +83,12 @@
 
       pkgs = import nixpkgs {
         inherit system;
-        config.allowUnfreePredicate = pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "kiro" ];
+        config.allowUnfreePredicate =
+          pkg:
+          builtins.elem (nixpkgs.lib.getName pkg) [
+            "antigravity"
+            "kiro"
+          ];
       };
 
       system = "x86_64-linux";

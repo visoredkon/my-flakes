@@ -90,10 +90,18 @@ pkgs.writeShellApplication {
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
       releaseFile="releases/$pkg.nix"
+      url=""
+      version=""
+      vscodeVersion=""
 
       echo "==> Updating $pkg..." >&2
 
-      if [[ "$baseUrl" == *"github.com"* ]]; then
+      if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
+        metadata=$(curl -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+        url=$(jq -r '.url // ""' <<<"$metadata")
+        version=$(gawk 'match($0, /\/stable\/([^/]+)\//, m) { print m[1] }' <<<"$url")
+        vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"github.com"* ]]; then
         repoBase="''${baseUrl%/releases/download}"
         redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
         tag=$(basename "$redirect" 2>/dev/null || true)
@@ -125,7 +133,15 @@ pkgs.writeShellApplication {
 
       echo "==> Updating $pkg from $current_version to $version..." >&2
 
-      url="''${urlTemplate//\{version\}/$version}"
+      if [[ -z "$url" ]]; then
+        url="''${urlTemplate//\{version\}/$version}"
+      fi
+
+      if [[ -z "$url" ]]; then
+        echo "Failed to determine download URL for $pkg" >&2
+        continue
+      fi
+
       tmp=$(mktemp)
 
       if ! curl -L -s -o "$tmp" "$url"; then
@@ -136,14 +152,23 @@ pkgs.writeShellApplication {
 
       sha=$(sha256sum "$tmp" | awk '{print $1}')
 
-      vscodeVersion=
       if [[ "$pkg" == "kiro" ]]; then
         vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" | jq -r '.vsCodeVersion')
       fi
 
+      if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
+        echo "Failed to determine vscodeVersion for $pkg" >&2
+        rm -f "$tmp"
+        continue
+      fi
+
       rm -f "$tmp"
 
-      if [[ "$pkg" == "kiro" ]]; then
+      if [[ "$pkg" == "antigravity" ]]; then
+        cat > "$releaseFile" <<EO
+    { sha256 = "$sha"; version = "$version"; vscodeVersion = "$vscodeVersion"; url = "$url"; }
+    EO
+      elif [[ "$pkg" == "kiro" ]]; then
         cat > "$releaseFile" <<EO
     { sha256 = "$sha"; version = "$version"; vscodeVersion = "$vscodeVersion"; }
     EO
