@@ -24,8 +24,19 @@ pkgs.writeShellApplication {
 
     COMMIT=false
     PUSH=false
+    failurePackages=()
+    failureMessages=()
     updates=()
     updated_packages=()
+
+    add_failure() {
+      local pkg="$1"
+      local message="$2"
+
+      failurePackages+=("$pkg")
+      failureMessages+=("$message")
+      echo "Error: $pkg: $message" >&2
+    }
 
     display_version() {
       if [[ -n "$1" ]]; then
@@ -38,6 +49,7 @@ pkgs.writeShellApplication {
     join_packages() {
       local joined=""
       local pkg=""
+
       for pkg in "$@"; do
         if [[ -z "$joined" ]]; then
           joined="$pkg"
@@ -45,7 +57,63 @@ pkgs.writeShellApplication {
           joined="$joined, $pkg"
         fi
       done
+
       echo "$joined"
+    }
+
+    release_field_value() {
+      local release_file="$1"
+      local field="$2"
+
+      gawk -v field="$field" '
+        match($0, field "[[:space:]]*=[[:space:]]*\"([^\"]*)\"", groups) {
+          print groups[1]
+          exit
+        }
+      ' "$release_file" 2>/dev/null || true
+    }
+
+    release_fields_for_package() {
+      case "$1" in
+      antigravity)
+        echo "sha256 url version vscodeVersion"
+        ;;
+      antigravity-cli)
+        echo "sha256 url version"
+        ;;
+      kiro)
+        echo "sha256 version vscodeVersion"
+        ;;
+      mise)
+        echo "sha256 sourceSha256 version"
+        ;;
+      *)
+        echo "sha256 version"
+        ;;
+      esac
+    }
+
+    release_value_for_field() {
+      case "$1" in
+      sha256)
+        echo "$sha"
+        ;;
+      sourceSha256)
+        echo "$sourceSha"
+        ;;
+      url)
+        echo "$url"
+        ;;
+      version)
+        echo "$version"
+        ;;
+      vscodeVersion)
+        echo "$vscodeVersion"
+        ;;
+      *)
+        echo ""
+        ;;
+      esac
     }
 
     usage() {
@@ -57,6 +125,55 @@ pkgs.writeShellApplication {
       --push               Push after committing (implies --commit)
       -h, --help           Show this help message
     EOF
+    }
+
+    validate_release_file() {
+      local pkg="$1"
+      local release_file="$2"
+      local field=""
+      local value=""
+
+      for field in $(release_fields_for_package "$pkg"); do
+        value=$(release_field_value "$release_file" "$field")
+        if [[ -z "$value" ]]; then
+          add_failure "$pkg" "missing $field in $release_file"
+          return 1
+        fi
+      done
+
+      return 0
+    }
+
+    validate_release_values() {
+      local pkg="$1"
+      local field=""
+      local value=""
+
+      for field in $(release_fields_for_package "$pkg"); do
+        value=$(release_value_for_field "$field")
+        if [[ -z "$value" ]]; then
+          add_failure "$pkg" "missing $field for release output"
+          return 1
+        fi
+      done
+
+      return 0
+    }
+
+    write_release_file() {
+      local pkg="$1"
+      local release_file="$2"
+      local field=""
+      local line="{ "
+      local value=""
+
+      for field in $(release_fields_for_package "$pkg"); do
+        value=$(release_value_for_field "$field")
+        line="$line$field = \"$value\"; "
+      done
+
+      line="$line}"
+      printf '%s\n' "$line" > "$release_file"
     }
 
     while [[ $# -gt 0 ]]; do
@@ -81,7 +198,7 @@ pkgs.writeShellApplication {
       esac
     done
 
-    git pull
+    git pull || true
 
     meta='${metaJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
@@ -90,6 +207,8 @@ pkgs.writeShellApplication {
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
       releaseFile="releases/$pkg.nix"
+      sha=""
+      sourceSha=""
       url=""
       version=""
       vscodeVersion=""
@@ -99,34 +218,42 @@ pkgs.writeShellApplication {
       if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
         metadata=$(curl -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
         url=$(jq -r '.url // ""' <<<"$metadata")
-        version=$(gawk 'match($0, /\/stable\/([^/]+)\//, m) { print m[1] }' <<<"$url")
+        version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
         vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
+        metadata=$(curl -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
+        url=$(jq -r '.url // ""' <<<"$metadata")
+        version=$(jq -r '.version // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
+        version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
       elif [[ "$baseUrl" == *"github.com"* ]]; then
         repoBase="''${baseUrl%/releases/download}"
         redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
         tag=$(basename "$redirect" 2>/dev/null || true)
         version="''${tag#v}"
-      elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
-        version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
-      elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
-        metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
-        version=$(jq -r '.currentRelease' <<<"$metadata")
       elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
         manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
-        version=$(jq -r '.version' <<<"$manifest")
+        version=$(jq -r '.version // ""' <<<"$manifest")
+      elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
+        metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+        version=$(jq -r '.currentRelease // ""' <<<"$metadata")
       else
-        echo "Automatic version discovery not supported for $pkg" >&2
+        add_failure "$pkg" "automatic version discovery not supported"
         continue
       fi
 
       if [[ -z "$version" ]]; then
-        echo "Failed to determine version for $pkg" >&2
+        add_failure "$pkg" "failed to determine version"
         continue
       fi
 
-      current_version=$(awk -F'"' '/version =/ {print $2}' "$releaseFile" 2>/dev/null || true)
+      current_version=$(release_field_value "$releaseFile" "version")
 
       if [[ "$current_version" == "$version" ]]; then
+        if ! validate_release_file "$pkg" "$releaseFile"; then
+          continue
+        fi
+
         echo "==> $pkg already at version $version" >&2
         continue
       fi
@@ -138,44 +265,64 @@ pkgs.writeShellApplication {
       fi
 
       if [[ -z "$url" ]]; then
-        echo "Failed to determine download URL for $pkg" >&2
+        add_failure "$pkg" "failed to determine download URL"
         continue
       fi
 
       tmp=$(mktemp)
 
       if ! curl -L -s -o "$tmp" "$url"; then
-        echo "Error: Failed to download $pkg version $version" >&2
+        add_failure "$pkg" "failed to download binary version $version"
         rm -f "$tmp"
         continue
       fi
 
-      sha=$(sha256sum "$tmp" | awk '{print $1}')
+      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+      if [[ -z "$sha" ]]; then
+        add_failure "$pkg" "failed to compute sha256 for $url"
+        rm -f "$tmp"
+        continue
+      fi
 
       if [[ "$pkg" == "kiro" ]]; then
-        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" | jq -r '.vsCodeVersion')
+        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
+      fi
+
+      if [[ "$pkg" == "mise" ]]; then
+        sourceTmp=$(mktemp)
+        sourceUrl="https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz"
+
+        if ! curl -L -s -o "$sourceTmp" "$sourceUrl"; then
+          add_failure "$pkg" "failed to download source version $version"
+          rm -f "$sourceTmp" "$tmp"
+          continue
+        fi
+
+        sourceSha=$(sha256sum "$sourceTmp" | awk '{print $1}' || true)
+        rm -f "$sourceTmp"
+
+        if [[ -z "$sourceSha" ]]; then
+          add_failure "$pkg" "failed to determine sourceSha256"
+          rm -f "$tmp"
+          continue
+        fi
       fi
 
       if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
-        echo "Failed to determine vscodeVersion for $pkg" >&2
+        add_failure "$pkg" "failed to determine vscodeVersion"
         rm -f "$tmp"
         continue
       fi
 
       rm -f "$tmp"
 
-      if [[ "$pkg" == "antigravity" ]]; then
-        cat > "$releaseFile" <<EO
-    { sha256 = "$sha"; version = "$version"; vscodeVersion = "$vscodeVersion"; url = "$url"; }
-    EO
-      elif [[ "$pkg" == "kiro" ]]; then
-        cat > "$releaseFile" <<EO
-    { sha256 = "$sha"; version = "$version"; vscodeVersion = "$vscodeVersion"; }
-    EO
-      else
-        cat > "$releaseFile" <<EO
-    { sha256 = "$sha"; version = "$version"; }
-    EO
+      if ! validate_release_values "$pkg"; then
+        continue
+      fi
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        continue
       fi
 
       updates+=("$pkg:$(display_version "$current_version"):$version")
@@ -183,11 +330,23 @@ pkgs.writeShellApplication {
       echo "==> Wrote $releaseFile" >&2
     done
 
-    echo "==> Formatting files..." >&2
-    nix --extra-experimental-features "nix-command flakes" fmt 2>/dev/null || true
+    if [[ "''${#failurePackages[@]}" -gt 0 ]]; then
+      echo "==> Failed packages:" >&2
+      for failureIndex in "''${!failurePackages[@]}"; do
+        echo "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}" >&2
+      done
+      exit 1
+    fi
 
-    echo "==> Updating flake.lock..." >&2
-    nix --extra-experimental-features "nix-command flakes" flake update 2>/dev/null || true
+    if [[ "''${#updates[@]}" -gt 0 ]]; then
+      echo "==> Formatting files..." >&2
+      nix --extra-experimental-features "nix-command flakes" fmt 2>/dev/null || true
+
+      echo "==> Updating flake.lock..." >&2
+      nix --extra-experimental-features "nix-command flakes" flake update 2>/dev/null || true
+    else
+      echo "==> No updates" >&2
+    fi
 
     if [[ "$COMMIT" == "true" ]]; then
       echo "==> Committing changes..." >&2

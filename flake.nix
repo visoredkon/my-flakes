@@ -8,35 +8,30 @@
   outputs =
     { nixpkgs, self }:
     let
-      formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
-
-      generatedPackages = builtins.mapAttrs (
-        name: meta:
-        pkgs.callPackage ./packages/${name}.nix {
-          inherit mkPrebuilt;
-          inherit (meta) release urlTemplate;
-        }
-      ) packageMetadata;
-
-      mkApp = program: {
-        inherit program;
-        type = "app";
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfreePredicate =
+          pkg:
+          builtins.elem (nixpkgs.lib.getName pkg) [
+            "antigravity"
+            "antigravity-cli"
+            "kiro"
+          ];
       };
 
-      mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
+      system = "x86_64-linux";
 
-      packageMetadata = builtins.mapAttrs (
-        name: info:
-        info
-        // {
-          release = import ./releases/${name}.nix;
-        }
-      ) packagesConfig;
+      mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
 
       packagesConfig = {
         "antigravity" = rec {
           baseUrl = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
           binName = "antigravity";
+          urlTemplate = "";
+        };
+        "antigravity-cli" = rec {
+          baseUrl = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app";
+          binName = "agy";
           urlTemplate = "";
         };
         "claude-code" = rec {
@@ -81,17 +76,28 @@
         };
       };
 
-      pkgs = import nixpkgs {
-        inherit system;
-        config.allowUnfreePredicate =
-          pkg:
-          builtins.elem (nixpkgs.lib.getName pkg) [
-            "antigravity"
-            "kiro"
-          ];
-      };
+      packageMetadata = builtins.mapAttrs (
+        name: info:
+        info
+        // {
+          release = import ./releases/${name}.nix;
+        }
+      ) packagesConfig;
 
-      system = "x86_64-linux";
+      generatedPackages = builtins.mapAttrs (
+        name: meta:
+        pkgs.callPackage ./packages/${name}.nix {
+          inherit mkPrebuilt;
+          inherit (meta) release urlTemplate;
+        }
+      ) packageMetadata;
+
+      formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
+
+      mkApp = program: {
+        inherit program;
+        type = "app";
+      };
 
       updateRelease = pkgs.callPackage ./apps/update-release.nix { inherit packageMetadata; };
     in
@@ -104,17 +110,26 @@
           "update-release" = mkApp "${updateRelease}/bin/update-release";
         };
 
-      checks.${system}.format =
-        pkgs.runCommand "check-format"
-          {
-            nativeBuildInputs = [ pkgs.nixfmt ];
-            src = self;
-          }
-          ''
-            cd $src
-            nixfmt --check ${formatTargets}
-            touch $out
-          '';
+      checks.${system} =
+        (builtins.mapAttrs (
+          name: _:
+          pkgs.runCommand "check-${name}" {
+            buildInputs = [ generatedPackages.${name} ];
+          } "touch $out"
+        ) packageMetadata)
+        // {
+          format =
+            pkgs.runCommand "check-format"
+              {
+                nativeBuildInputs = [ pkgs.nixfmt ];
+                src = self;
+              }
+              ''
+                cd $src
+                nixfmt --check ${formatTargets}
+                touch $out
+              '';
+        };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
 

@@ -9,12 +9,15 @@ mkPrebuilt {
   pname = "forgecode";
   inherit release urlTemplate;
 
+  dontBuild = true;
+  dontUnpack = true;
+
   buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
-
-  dontBuild = true;
-  dontUnpack = true;
+  nativeBuildInputs = with pkgs; [
+    autoPatchelfHook
+  ];
 
   installPhase = ''
     runHook preInstall
@@ -23,8 +26,4 @@ mkPrebuilt {
 
     runHook postInstall
   '';
-
-  nativeBuildInputs = with pkgs; [
-    autoPatchelfHook
-  ];
 }

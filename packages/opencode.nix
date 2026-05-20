@@ -11,6 +11,10 @@ mkPrebuilt {
 
   dontBuild = true;
 
+  nativeBuildInputs = with pkgs; [
+    autoPatchelfHook
+  ];
+
   installPhase = ''
     runHook preInstall
 
@@ -18,10 +22,6 @@ mkPrebuilt {
 
     runHook postInstall
   '';
-
-  nativeBuildInputs = with pkgs; [
-    autoPatchelfHook
-  ];
 
   sourceRoot = ".";
 }

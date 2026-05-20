@@ -5,19 +5,24 @@
   ...
 }:
 
+assert release ? sha256 && release.sha256 != "";
+assert release ? version && release.version != "";
+assert release ? vscodeVersion && release.vscodeVersion != "";
+
 (pkgs.buildVscode {
-  pname = "kiro";
-  inherit (release) version vscodeVersion;
   executableName = "kiro";
+  inherit (release) version vscodeVersion;
   longName = "Kiro";
+  meta = { };
+  pname = "kiro";
   shortName = "kiro";
   src = pkgs.fetchurl {
-    url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
     inherit (release) sha256;
+    url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
   };
-  sourceRoot = "Kiro";
+
   commandLineArgs = "--password-store=gnome-libsecret";
-  meta = { };
+  sourceRoot = "Kiro";
   tests = { };
   updateScript = null;
 }).fhs

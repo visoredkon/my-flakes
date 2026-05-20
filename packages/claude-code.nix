@@ -12,6 +12,11 @@ mkPrebuilt {
   dontBuild = true;
   dontUnpack = true;
 
+  nativeBuildInputs = with pkgs; [
+    autoPatchelfHook
+    makeWrapper
+  ];
+
   installPhase = ''
     runHook preInstall
 
@@ -36,9 +41,4 @@ mkPrebuilt {
 
     runHook postInstall
   '';
-
-  nativeBuildInputs = with pkgs; [
-    autoPatchelfHook
-    makeWrapper
-  ];
 }

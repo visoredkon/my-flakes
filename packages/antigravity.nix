@@ -4,38 +4,147 @@
   ...
 }:
 
-(pkgs.buildVscode {
+assert release ? sha256 && release.sha256 != "";
+assert release ? url && release.url != "";
+assert release ? version && release.version != "";
+
+let
   pname = "antigravity";
-  inherit (release) version vscodeVersion;
-  executableName = "antigravity";
-  iconName = "antigravity";
-  libraryName = "antigravity";
-  longName = "Antigravity";
-  shortName = "Antigravity";
-  src = pkgs.fetchurl {
-    inherit (release) sha256 url;
-  };
-  sourceRoot = "Antigravity";
-  commandLineArgs = "--password-store=gnome-libsecret";
-  customizeFHSEnv =
-    args:
-    args
-    // {
-      extraBwrapArgs = (args.extraBwrapArgs or [ ]) ++ [ "--tmpfs /opt/google/chrome" ];
-      extraBuildCommands = (args.extraBuildCommands or "") + ''
-        mkdir -p "$out/opt/google/chrome"
-      '';
-      runScript = pkgs.writeShellScript "antigravity-wrapper" ''
-        for candidate in google-chrome-stable google-chrome chromium-browser chromium; do
-          if target=$(command -v "$candidate"); then
-            ${pkgs.coreutils}/bin/ln -sf "$target" /opt/google/chrome/chrome
-            break
-          fi
-        done
-        exec ${args.runScript} "$@"
-      '';
+  inherit (release) version;
+
+  antigravity-base = pkgs.stdenvNoCC.mkDerivation {
+    pname = "${pname}-base";
+    inherit version;
+
+    src = pkgs.fetchurl {
+      inherit (release) sha256 url;
     };
+
+    dontBuild = true;
+
+    nativeBuildInputs = with pkgs; [
+      autoPatchelfHook
+    ];
+
+    buildInputs = with pkgs; [
+      alsa-lib
+      at-spi2-atk
+      atk
+      cairo
+      cups
+      dbus
+      expat
+      fontconfig
+      freetype
+      gdk-pixbuf
+      glib
+      gtk3
+      libdrm
+      libglvnd
+      libnotify
+      libpulseaudio
+      libuuid
+      libxcb
+      libxkbcommon
+      mesa
+      nspr
+      nss
+      pango
+      systemd
+      libX11
+      libXScrnSaver
+      libXcomposite
+      libXcursor
+      libXdamage
+      libXext
+      libXfixes
+      libXi
+      libXrandr
+      libXrender
+      libXtst
+      libxcb
+      libxshmfence
+    ];
+
+    installPhase = ''
+      runHook preInstall
+
+      mkdir -p "$out/opt/antigravity"
+      cp -r * "$out/opt/antigravity"
+      chmod +x "$out/opt/antigravity/antigravity"
+
+      mkdir -p "$out/bin"
+      ln -s "$out/opt/antigravity/antigravity" "$out/bin/antigravity"
+
+      runHook postInstall
+    '';
+
+    sourceRoot = "Antigravity-x64";
+  };
+in
+pkgs.buildFHSEnv {
+  name = pname;
+
+  targetPkgs =
+    pkgs: with pkgs; [
+      antigravity-base
+      coreutils
+      xdg-utils
+      glib
+      gtk3
+      gsettings-desktop-schemas
+      libGL
+      libGLU
+      nss
+      nspr
+      alsa-lib
+      libuuid
+      libdrm
+      mesa
+      libxcb
+      libxkbcommon
+      libX11
+      libXScrnSaver
+      libXcomposite
+      libXcursor
+      libXdamage
+      libXext
+      libXfixes
+      libXi
+      libXrandr
+      libXrender
+      libXtst
+      libxcb
+      libxshmfence
+      dbus
+      expat
+      fontconfig
+      freetype
+      pango
+      cairo
+      atk
+      at-spi2-atk
+      gdk-pixbuf
+      cups
+    ];
+
+  extraBwrapArgs = [
+    "--tmpfs /opt/google/chrome"
+  ];
+
+  extraBuildCommands = ''
+    mkdir -p "$out/opt/google/chrome"
+  '';
+
+  runScript = pkgs.writeShellScript "antigravity-fhs-wrapper" ''
+    for candidate in google-chrome-stable google-chrome chromium-browser chromium; do
+      if target=$(command -v "$candidate"); then
+        ${pkgs.coreutils}/bin/ln -sf "$target" /opt/google/chrome/chrome
+        break
+      fi
+    done
+    exec antigravity "$@"
+  '';
+
   meta = { };
-  tests = { };
-  updateScript = null;
-}).fhs
+}

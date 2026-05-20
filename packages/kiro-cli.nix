@@ -12,6 +12,10 @@ mkPrebuilt {
   buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
+  nativeBuildInputs = with pkgs; [
+    autoPatchelfHook
+    unzip
+  ];
 
   installPhase = ''
     runHook preInstall
@@ -23,12 +27,6 @@ mkPrebuilt {
 
     runHook postInstall
   '';
-
-  nativeBuildInputs = with pkgs; [
-    autoPatchelfHook
-    unzip
-  ];
-
   unpackPhase = ''
     unzip $src
   '';
