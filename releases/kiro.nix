@@ -1,5 +1,5 @@
 {
-  sha256 = "f4e10c67b1688c8c89b8707010f3d809b83aa63b438c0a3947ab0527a3fc49ba";
-  version = "0.12.200";
+  sha256 = "1485b3e151e8dc15226fafecd377a1fe9849689b65eb2ed08aef32d3349aaf21";
+  version = "0.12.224";
   vscodeVersion = "1.107.1";
 }
