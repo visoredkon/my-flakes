@@ -357,14 +357,14 @@ pkgs.writeShellApplication {
       else
         update_count=''${#updates[@]}
         if [[ "$update_count" -eq 0 ]]; then
-          commit_subject="build(release): refresh release metadata"
+          commit_subject="chore(version): refresh release metadata"
         elif [[ "$update_count" -eq 1 ]]; then
           IFS=':' read -r pkg from_version to_version <<<"''${updates[0]}"
-          commit_subject="build(release): bump $pkg $from_version -> $to_version"
+          commit_subject="chore(version): bump $pkg $from_version -> $to_version"
         elif [[ "$update_count" -le 3 ]]; then
-          commit_subject="build(release): bump $(join_packages "''${updated_packages[@]}")"
+          commit_subject="chore(version): bump $(join_packages "''${updated_packages[@]}")"
         else
-          commit_subject="build(release): bump $update_count packages"
+          commit_subject="chore(version): bump $update_count packages"
         fi
 
         commit_message_file=$(mktemp)
