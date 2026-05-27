@@ -3,6 +3,7 @@
   pkgs,
   release,
   urlTemplate,
+  ...
 }:
 
 mkPrebuilt {

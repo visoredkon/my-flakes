@@ -1,6 +1,7 @@
 {
   packageMetadata,
   pkgs,
+  ...
 }:
 
 let

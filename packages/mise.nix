@@ -3,6 +3,7 @@
   pkgs,
   release,
   urlTemplate,
+  ...
 }:
 
 assert release ? sourceSha256 && release.sourceSha256 != "";

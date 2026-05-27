@@ -1,6 +1,7 @@
 {
   formatTargets,
   pkgs,
+  ...
 }:
 
 pkgs.writeShellApplication {

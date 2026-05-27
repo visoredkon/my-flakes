@@ -24,12 +24,12 @@
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
 
       packagesConfig = {
-        "antigravity" = rec {
+        "antigravity" = {
           baseUrl = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
           binName = "antigravity";
           urlTemplate = "";
         };
-        "antigravity-cli" = rec {
+        "antigravity-cli" = {
           baseUrl = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app";
           binName = "agy";
           urlTemplate = "";
@@ -48,11 +48,6 @@
           baseUrl = "https://github.com/github/copilot-cli/releases/download";
           binName = "copilot";
           urlTemplate = "${baseUrl}/v{version}/copilot-linux-x64.tar.gz";
-        };
-        "forgecode" = rec {
-          baseUrl = "https://github.com/tailcallhq/forgecode/releases/download";
-          binName = "forgecode";
-          urlTemplate = "${baseUrl}/v{version}/forge-x86_64-unknown-linux-gnu";
         };
         "kiro" = rec {
           baseUrl = "https://prod.download.desktop.kiro.dev";
