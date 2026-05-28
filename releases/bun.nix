@@ -1,0 +1,5 @@
+{
+  sha256 = "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f";
+  sourceSha256 = "112a5915992807f04b183854d360c2bf87ac7c1587fb5da3c560bdbb75b8c92e";
+  version = "1.3.14";
+}

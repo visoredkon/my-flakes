@@ -62,6 +62,30 @@ pkgs.writeShellApplication {
       echo "$joined"
     }
 
+    download_source_sha256() {
+      local url="$1"
+      local tmp
+
+      tmp=$(mktemp)
+
+      if ! curl -L -s -o "$tmp" "$url"; then
+        rm -f "$tmp"
+        echo ""
+        return 1
+      fi
+
+      local sha
+      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+      rm -f "$tmp"
+
+      if [[ -z "$sha" ]]; then
+        echo ""
+        return 1
+      fi
+
+      echo "$sha"
+    }
+
     release_field_value() {
       local release_file="$1"
       local field="$2"
@@ -81,6 +105,9 @@ pkgs.writeShellApplication {
         ;;
       antigravity-cli)
         echo "sha256 url version"
+        ;;
+      bun)
+        echo "sha256 sourceSha256 version"
         ;;
       kiro)
         echo "sha256 version vscodeVersion"
@@ -231,7 +258,14 @@ pkgs.writeShellApplication {
         repoBase="''${baseUrl%/releases/download}"
         redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
         tag=$(basename "$redirect" 2>/dev/null || true)
-        version="''${tag#v}"
+        case "$pkg" in
+          bun)
+            version="''${tag#bun-v}"
+            ;;
+          *)
+            version="''${tag#v}"
+            ;;
+        esac
       elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
         manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
         version=$(jq -r '.version // ""' <<<"$manifest")
@@ -290,18 +324,16 @@ pkgs.writeShellApplication {
       fi
 
       if [[ "$pkg" == "mise" ]]; then
-        sourceTmp=$(mktemp)
-        sourceUrl="https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz"
-
-        if ! curl -L -s -o "$sourceTmp" "$sourceUrl"; then
-          add_failure "$pkg" "failed to download source version $version"
-          rm -f "$sourceTmp" "$tmp"
+        sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
+        if [[ -z "$sourceSha" ]]; then
+          add_failure "$pkg" "failed to determine sourceSha256"
+          rm -f "$tmp"
           continue
         fi
+      fi
 
-        sourceSha=$(sha256sum "$sourceTmp" | awk '{print $1}' || true)
-        rm -f "$sourceTmp"
-
+      if [[ "$pkg" == "bun" ]]; then
+        sourceSha=$(download_source_sha256 "https://github.com/oven-sh/bun/archive/refs/tags/bun-v$version.tar.gz") || true
         if [[ -z "$sourceSha" ]]; then
           add_failure "$pkg" "failed to determine sourceSha256"
           rm -f "$tmp"

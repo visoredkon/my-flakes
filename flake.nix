@@ -34,6 +34,11 @@
           binName = "agy";
           urlTemplate = "";
         };
+        "bun" = rec {
+          baseUrl = "https://github.com/oven-sh/bun/releases/download";
+          binName = "bun";
+          urlTemplate = "${baseUrl}/bun-v{version}/bun-linux-x64.zip";
+        };
         "claude-code" = rec {
           baseUrl = "https://downloads.claude.ai/claude-code-releases";
           binName = "claude";
