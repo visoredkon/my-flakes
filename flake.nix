@@ -74,6 +74,11 @@
           binName = "opencode";
           urlTemplate = "${baseUrl}/v{version}/opencode-linux-x64.tar.gz";
         };
+        "typescript-language-server" = rec {
+          baseUrl = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server";
+          binName = "typescript-language-server";
+          urlTemplate = "${baseUrl}-{version}.tgz";
+        };
       };
 
       packageMetadata = builtins.mapAttrs (

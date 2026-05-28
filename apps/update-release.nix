@@ -115,6 +115,9 @@ pkgs.writeShellApplication {
       mise)
         echo "sha256 sourceSha256 version"
         ;;
+      typescript-language-server)
+        echo "sha256 version"
+        ;;
       *)
         echo "sha256 version"
         ;;
@@ -272,6 +275,10 @@ pkgs.writeShellApplication {
       elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
         metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
         version=$(jq -r '.currentRelease // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
+        pkgName=$(basename "$baseUrl")
+        metadata=$(curl -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
+        version=$(jq -r '.version // ""' <<<"$metadata")
       else
         add_failure "$pkg" "automatic version discovery not supported"
         continue
