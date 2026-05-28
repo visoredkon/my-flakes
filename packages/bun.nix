@@ -6,14 +6,6 @@
   ...
 }:
 
-assert release ? sourceSha256 && release.sourceSha256 != "";
-
-let
-  completionsArchive = pkgs.fetchurl {
-    sha256 = release.sourceSha256;
-    url = "https://github.com/oven-sh/bun/archive/refs/tags/bun-v${release.version}.tar.gz";
-  };
-in
 mkPrebuilt {
   pname = "bun";
   inherit release urlTemplate;
@@ -22,7 +14,7 @@ mkPrebuilt {
   sourceRoot = ".";
 
   buildInputs = with pkgs; [
-    gcc-unwrapped.lib
+    openssl
   ];
   nativeBuildInputs = with pkgs; [
     autoPatchelfHook
@@ -34,21 +26,17 @@ mkPrebuilt {
     runHook preInstall
 
     install -Dm755 bun-linux-x64/bun "$out/bin/bun"
+    ln -s bun "$out/bin/bunx"
 
     runHook postInstall
   '';
 
-  postFixup = ''
-    mkdir -p completions
+  postPhases = [ "postPatchelf" ];
 
-    tar --extract --file "${completionsArchive}" --directory completions --strip-components=2 \
-      "bun-bun-v${release.version}/completions/bun.bash" \
-      "bun-bun-v${release.version}/completions/bun.zsh" \
-      "bun-bun-v${release.version}/completions/bun.fish"
-
-    installShellCompletion \
-      --bash completions/bun.bash \
-      --fish completions/bun.fish \
-      --zsh completions/bun.zsh
+  postPatchelf = ''
+    installShellCompletion --cmd bun \
+      --bash <(SHELL="bash" $out/bin/bun completions) \
+      --zsh <(SHELL="zsh" $out/bin/bun completions) \
+      --fish <(SHELL="fish" $out/bin/bun completions)
   '';
 }

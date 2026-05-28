@@ -106,9 +106,6 @@ pkgs.writeShellApplication {
       antigravity-cli)
         echo "sha256 url version"
         ;;
-      bun)
-        echo "sha256 sourceSha256 version"
-        ;;
       kiro)
         echo "sha256 version vscodeVersion"
         ;;
@@ -332,15 +329,6 @@ pkgs.writeShellApplication {
 
       if [[ "$pkg" == "mise" ]]; then
         sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
-        if [[ -z "$sourceSha" ]]; then
-          add_failure "$pkg" "failed to determine sourceSha256"
-          rm -f "$tmp"
-          continue
-        fi
-      fi
-
-      if [[ "$pkg" == "bun" ]]; then
-        sourceSha=$(download_source_sha256 "https://github.com/oven-sh/bun/archive/refs/tags/bun-v$version.tar.gz") || true
         if [[ -z "$sourceSha" ]]; then
           add_failure "$pkg" "failed to determine sourceSha256"
           rm -f "$tmp"
