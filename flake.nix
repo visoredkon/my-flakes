@@ -16,6 +16,7 @@
             "antigravity"
             "antigravity-cli"
             "kiro"
+            "warp-terminal"
           ];
       };
 
@@ -78,6 +79,11 @@
           baseUrl = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server";
           binName = "typescript-language-server";
           urlTemplate = "${baseUrl}-{version}.tgz";
+        };
+        "warp-terminal" = rec {
+          baseUrl = "https://releases.warp.dev/stable";
+          binName = "warp-terminal";
+          urlTemplate = "${baseUrl}/v{version}/warp-terminal-v{version}-1-x86_64.pkg.tar.zst";
         };
       };
 

@@ -276,6 +276,9 @@ pkgs.writeShellApplication {
         pkgName=$(basename "$baseUrl")
         metadata=$(curl -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
         version=$(jq -r '.version // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
+        redirect=$(curl -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
+        version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
       else
         add_failure "$pkg" "automatic version discovery not supported"
         continue
