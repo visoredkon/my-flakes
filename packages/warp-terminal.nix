@@ -59,16 +59,4 @@ mkPrebuilt {
       --add-needed libfontconfig.so.1 \
       $out/opt/warpdotdev/warp-terminal/warp
   '';
-
-  meta = {
-    description = "Warp is an agentic development environment, born out of the terminal";
-    homepage = "https://www.warp.dev";
-    license = pkgs.lib.licenses.unfree;
-    mainProgram = "warp-terminal";
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
-    sourceProvenance = with pkgs.lib.sourceTypes; [ binaryNativeCode ];
-  };
 }

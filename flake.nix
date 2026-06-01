@@ -8,6 +8,8 @@
   outputs =
     { nixpkgs, self }:
     let
+      system = "x86_64-linux";
+
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfreePredicate =
@@ -19,8 +21,6 @@
             "warp-terminal"
           ];
       };
-
-      system = "x86_64-linux";
 
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
 

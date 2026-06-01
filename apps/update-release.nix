@@ -226,7 +226,7 @@ pkgs.writeShellApplication {
       esac
     done
 
-    git pull || true
+    git pull || echo "Warning: git pull failed, continuing..." >&2
 
     meta='${metaJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
@@ -371,10 +371,10 @@ pkgs.writeShellApplication {
 
     if [[ "''${#updates[@]}" -gt 0 ]]; then
       echo "==> Formatting files..." >&2
-      nix --extra-experimental-features "nix-command flakes" fmt 2>/dev/null || true
+      nix --extra-experimental-features "nix-command flakes" fmt || true
 
       echo "==> Updating flake.lock..." >&2
-      nix --extra-experimental-features "nix-command flakes" flake update 2>/dev/null || true
+      nix --extra-experimental-features "nix-command flakes" flake update || true
     else
       echo "==> No updates" >&2
     fi

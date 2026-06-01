@@ -44,13 +44,6 @@ let
       libnotify
       libpulseaudio
       libuuid
-      libxcb
-      libxkbcommon
-      mesa
-      nspr
-      nss
-      pango
-      systemd
       libX11
       libXScrnSaver
       libXcomposite
@@ -63,7 +56,13 @@ let
       libXrender
       libXtst
       libxcb
+      libxkbcommon
       libxshmfence
+      mesa
+      nspr
+      nss
+      pango
+      systemd
     ];
 
     installPhase = ''
@@ -87,22 +86,28 @@ pkgs.buildFHSEnv {
 
   targetPkgs =
     pkgs: with pkgs; [
+      alsa-lib
       antigravity-base
+      at-spi2-atk
+      atk
+      cairo
       coreutils
-      xdg-utils
+      cups
+      dbus
+      expat
+      fontconfig
+      freetype
+      gdk-pixbuf
       glib
-      gtk3
       gsettings-desktop-schemas
+      gtk3
+      libdrm
+      libglvnd
       libGL
       libGLU
-      nss
-      nspr
-      alsa-lib
+      libnotify
+      libpulseaudio
       libuuid
-      libdrm
-      mesa
-      libxcb
-      libxkbcommon
       libX11
       libXScrnSaver
       libXcomposite
@@ -115,17 +120,14 @@ pkgs.buildFHSEnv {
       libXrender
       libXtst
       libxcb
+      libxkbcommon
       libxshmfence
-      dbus
-      expat
-      fontconfig
-      freetype
+      mesa
+      nspr
+      nss
       pango
-      cairo
-      atk
-      at-spi2-atk
-      gdk-pixbuf
-      cups
+      systemd
+      xdg-utils
     ];
 
   extraBwrapArgs = [

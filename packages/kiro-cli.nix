@@ -10,6 +10,9 @@ mkPrebuilt {
   pname = "kiro-cli";
   inherit release urlTemplate;
 
+  dontBuild = true;
+  sourceRoot = ".";
+
   buildInputs = with pkgs; [
     gcc-unwrapped.lib
   ];
