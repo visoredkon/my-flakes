@@ -14,6 +14,7 @@ mkPrebuilt {
   sourceRoot = ".";
 
   buildInputs = with pkgs; [
+    alsa-lib
     gcc-unwrapped.lib
   ];
   nativeBuildInputs = with pkgs; [
