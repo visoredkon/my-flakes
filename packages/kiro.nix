@@ -25,4 +25,11 @@ assert release ? vscodeVersion && release.vscodeVersion != "";
   sourceRoot = "Kiro";
   tests = { };
   updateScript = null;
-}).fhs
+}).fhs.overrideAttrs
+  (old: {
+    extraInstallCommands = (old.extraInstallCommands or "") + ''
+      for f in $out/share/applications/kiro*.desktop; do
+        substituteInPlace "$f" --replace-fail "Keywords=vscode" "Keywords="
+      done
+    '';
+  })
