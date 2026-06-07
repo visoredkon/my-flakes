@@ -140,6 +140,17 @@
                 nixfmt --check ${formatTargets}
                 touch $out
               '';
+          linter =
+            pkgs.runCommand "check-linter"
+              {
+                nativeBuildInputs = [ pkgs.statix ];
+                src = self;
+              }
+              ''
+                cd $src
+                statix check .
+                touch $out
+              '';
         };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
