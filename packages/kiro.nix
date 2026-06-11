@@ -32,6 +32,7 @@ let
     postFixup = (old.postFixup or "") + ''
       for f in $out/share/applications/kiro*.desktop; do
         substituteInPlace "$f" --replace-fail "Keywords=vscode" "Keywords="
+        substituteInPlace "$f" --replace-fail "Comment=Code Editing. Redefined." "Comment=Agentic development environment for shipping real engineering work with AI agents"
       done
     '';
   });
