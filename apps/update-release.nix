@@ -1,25 +1,32 @@
 {
+  lib,
   packageMetadata,
+  goPackagesConfig ? { },
   pkgs,
   ...
 }:
 
 let
   metaJson = builtins.toJSON (
-    pkgs.lib.mapAttrs (_: v: { inherit (v) baseUrl urlTemplate; }) packageMetadata
+    lib.mapAttrs (_: v: { inherit (v) baseUrl urlTemplate; }) packageMetadata
   );
+  goPackagesJson = builtins.toJSON goPackagesConfig;
 in
 pkgs.writeShellApplication {
   name = "update-release";
-  runtimeInputs = with pkgs; [
-    coreutils
-    curl
-    gawk
-    git
-    gnutar
-    jq
-    nix
-  ];
+  runtimeInputs =
+    with pkgs;
+    [
+      coreutils
+      curl
+      gawk
+      git
+      gnupg
+      gnutar
+      jq
+      nix
+    ]
+    ++ lib.optionals (goPackagesConfig != { }) [ gh ];
   text = ''
     set -euo pipefail
 
@@ -106,6 +113,9 @@ pkgs.writeShellApplication {
       antigravity-cli)
         echo "sha256 url version"
         ;;
+      bootdev)
+        echo "sourceSha256 vendorHash version"
+        ;;
       kiro)
         echo "sha256 version vscodeVersion"
         ;;
@@ -131,6 +141,9 @@ pkgs.writeShellApplication {
         ;;
       url)
         echo "$url"
+        ;;
+      vendorHash)
+        echo "$vendorHash"
         ;;
       version)
         echo "$version"
@@ -346,6 +359,68 @@ pkgs.writeShellApplication {
       fi
 
       rm -f "$tmp"
+
+      if ! validate_release_values "$pkg"; then
+        continue
+      fi
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        continue
+      fi
+
+      updates+=("$pkg:$(display_version "$current_version"):$version")
+      updated_packages+=("$pkg")
+      echo "==> Wrote $releaseFile" >&2
+    done
+
+    goPackages='${goPackagesJson}'
+    for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
+      releaseFile="releases/$pkg.nix"
+      sourceSha=""
+      vendorHash=""
+      version=""
+
+      echo "==> Updating Go package $pkg..." >&2
+
+      repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
+      repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
+
+      tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' 2>/dev/null || true)
+      version="''${tag#v}"
+
+      if [[ -z "$version" ]]; then
+        add_failure "$pkg" "failed to determine version via gh api"
+        continue
+      fi
+
+      current_version=$(release_field_value "$releaseFile" "version")
+
+      if [[ "$current_version" == "$version" ]]; then
+        if ! validate_release_file "$pkg" "$releaseFile"; then
+          continue
+        fi
+
+        echo "==> $pkg already at version $version" >&2
+        continue
+      fi
+
+      echo "==> Updating $pkg from $current_version to $version..." >&2
+
+      sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
+      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+      if [[ -z "$sourceSha" ]]; then
+        add_failure "$pkg" "failed to compute sourceSha256"
+        continue
+      fi
+      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+
+      vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      vendorHash=$(release_field_value "$releaseFile" "vendorHash")
+      if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
+        vendorHash="$vendorHashPlaceholder"
+        echo "==> WARNING: vendorHash is placeholder, run 'nix build .#$pkg' to discover correct hash" >&2
+      fi
 
       if ! validate_release_values "$pkg"; then
         continue

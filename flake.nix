@@ -87,6 +87,31 @@
         };
       };
 
+      goPackagesConfig = {
+        "bootdev" = {
+          repoOwner = "bootdotdev";
+          repoName = "bootdev";
+        };
+      };
+
+      goPackageNames = builtins.attrNames goPackagesConfig;
+
+      goPackageReleases = builtins.listToAttrs (
+        map (name: {
+          inherit name;
+          value = import ./releases/${name}.nix;
+        }) goPackageNames
+      );
+
+      goPackages = builtins.listToAttrs (
+        map (name: {
+          inherit name;
+          value = pkgs.callPackage ./packages/${name}.nix {
+            release = goPackageReleases.${name};
+          };
+        }) goPackageNames
+      );
+
       packageMetadata = builtins.mapAttrs (
         name: info:
         info
@@ -95,13 +120,15 @@
         }
       ) packagesConfig;
 
-      generatedPackages = builtins.mapAttrs (
-        name: meta:
-        pkgs.callPackage ./packages/${name}.nix {
-          inherit mkPrebuilt;
-          inherit (meta) release urlTemplate;
-        }
-      ) packageMetadata;
+      generatedPackages =
+        (builtins.mapAttrs (
+          name: meta:
+          pkgs.callPackage ./packages/${name}.nix {
+            inherit mkPrebuilt;
+            inherit (meta) release urlTemplate;
+          }
+        ) (builtins.removeAttrs packageMetadata goPackageNames))
+        // goPackages;
 
       formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
 
@@ -110,7 +137,10 @@
         type = "app";
       };
 
-      updateRelease = pkgs.callPackage ./apps/update-release.nix { inherit packageMetadata; };
+      updateRelease = pkgs.callPackage ./apps/update-release.nix {
+        inherit packageMetadata;
+        inherit goPackagesConfig;
+      };
     in
     {
       apps.${system} =
@@ -118,6 +148,7 @@
           name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}"
         ) packageMetadata)
         // {
+          "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
           "update-release" = mkApp "${updateRelease}/bin/update-release";
         };
 
@@ -129,6 +160,9 @@
           } "touch $out"
         ) packageMetadata)
         // {
+          "bootdev" = pkgs.runCommand "check-bootdev" {
+            buildInputs = [ generatedPackages.bootdev ];
+          } "touch $out";
           format =
             pkgs.runCommand "check-format"
               {
@@ -157,7 +191,10 @@
 
       overlays.default =
         _: prev:
-        builtins.intersectAttrs packagesConfig (self.packages.${prev.stdenv.hostPlatform.system} or { });
+        builtins.intersectAttrs packagesConfig (self.packages.${prev.stdenv.hostPlatform.system} or { })
+        // builtins.genAttrs goPackageNames (
+          name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
+        );
 
       packages.${system} = generatedPackages;
     };
