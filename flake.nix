@@ -192,7 +192,7 @@
       overlays.default =
         _: prev:
         builtins.intersectAttrs packagesConfig (self.packages.${prev.stdenv.hostPlatform.system} or { })
-        // builtins.genAttrs goPackageNames (
+        // nixpkgs.lib.genAttrs goPackageNames (
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
         );
 
