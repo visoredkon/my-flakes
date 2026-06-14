@@ -419,7 +419,6 @@ pkgs.writeShellApplication {
       vendorHash=$(release_field_value "$releaseFile" "vendorHash")
       if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
         vendorHash="$vendorHashPlaceholder"
-        echo "==> WARNING: vendorHash is placeholder, run 'nix build .#$pkg' to discover correct hash" >&2
       fi
 
       if ! validate_release_values "$pkg"; then
@@ -429,6 +428,20 @@ pkgs.writeShellApplication {
       if ! write_release_file "$pkg" "$releaseFile"; then
         add_failure "$pkg" "failed to write $releaseFile"
         continue
+      fi
+
+      echo "==> Discovering vendorHash via build attempt..." >&2
+      buildOutput=$(nix build ".#$pkg" 2>&1 || true)
+      rm -f result
+
+      correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
+
+      if [[ -n "$correctHash" ]]; then
+        vendorHash="$correctHash"
+        echo "==> Discovered vendorHash: $vendorHash" >&2
+        write_release_file "$pkg" "$releaseFile"
+      else
+        echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
       fi
 
       updates+=("$pkg:$(display_version "$current_version"):$version")
