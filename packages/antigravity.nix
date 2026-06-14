@@ -172,6 +172,7 @@ pkgs.buildFHSEnv {
   '';
 
   runScript = pkgs.writeShellScript "antigravity-fhs-wrapper" ''
+    export ELECTRON_DISABLE_SANDBOX=1
     for candidate in google-chrome-stable google-chrome chromium-browser chromium; do
       if target=$(command -v "$candidate"); then
         ${pkgs.coreutils}/bin/ln -sf "$target" /opt/google/chrome/chrome
