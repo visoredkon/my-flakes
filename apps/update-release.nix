@@ -386,7 +386,7 @@ pkgs.writeShellApplication {
       repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
       repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
 
-      tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' 2>/dev/null || true)
+      tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' || true)
       version="''${tag#v}"
 
       if [[ -z "$version" ]]; then
