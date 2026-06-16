@@ -80,6 +80,16 @@
           binName = "typescript-language-server";
           urlTemplate = "${baseUrl}-{version}.tgz";
         };
+        "tinymist" = rec {
+          baseUrl = "https://github.com/Myriad-Dreamin/tinymist/releases/download";
+          binName = "tinymist";
+          urlTemplate = "${baseUrl}/v{version}/tinymist-x86_64-unknown-linux-gnu.tar.gz";
+        };
+        "typst" = rec {
+          baseUrl = "https://github.com/typst/typst/releases/download";
+          binName = "typst";
+          urlTemplate = "${baseUrl}/v{version}/typst-x86_64-unknown-linux-musl.tar.xz";
+        };
         "warp-terminal" = rec {
           baseUrl = "https://releases.warp.dev/stable";
           binName = "warp-terminal";

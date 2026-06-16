@@ -122,6 +122,9 @@ pkgs.writeShellApplication {
       mise)
         echo "sha256 sourceSha256 version"
         ;;
+      tinymist)
+        echo "completionsSha256 sha256 version"
+        ;;
       typescript-language-server)
         echo "sha256 version"
         ;;
@@ -133,6 +136,9 @@ pkgs.writeShellApplication {
 
     release_value_for_field() {
       case "$1" in
+      completionsSha256)
+        echo "$completionsSha"
+        ;;
       sha256)
         echo "$sha"
         ;;
@@ -248,6 +254,7 @@ pkgs.writeShellApplication {
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
       releaseFile="releases/$pkg.nix"
+      completionsSha=""
       sha=""
       sourceSha=""
       url=""
@@ -347,6 +354,17 @@ pkgs.writeShellApplication {
         sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
         if [[ -z "$sourceSha" ]]; then
           add_failure "$pkg" "failed to determine sourceSha256"
+          rm -f "$tmp"
+          continue
+        fi
+      fi
+
+      if [[ "$pkg" == "tinymist" ]]; then
+        completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
+        completionsSha=$(download_source_sha256 "$completionsUrl") || true
+        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
+        if [[ -z "$completionsSha" ]]; then
+          add_failure "$pkg" "failed to determine completionsSha256"
           rm -f "$tmp"
           continue
         fi
