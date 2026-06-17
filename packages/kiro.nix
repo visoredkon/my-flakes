@@ -29,6 +29,7 @@ let
   };
 
   patched = base.overrideAttrs (old: {
+    buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.libcap ];
     postFixup = (old.postFixup or "") + ''
       for f in $out/share/applications/kiro*.desktop; do
         substituteInPlace "$f" --replace-fail "Keywords=vscode" "Keywords="
