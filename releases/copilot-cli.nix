@@ -1,4 +1,4 @@
 {
-  sha256 = "da36be29a5afc7c6cef63b25ac10ee1862216a0f5efabed502ed42c4e0f62af8";
-  version = "1.0.65";
+  sha256 = "c6d251de20d14415ebd6af00bfb6a8e3854094b49fa49fb7f3df2bfa64f6db3b";
+  version = "1.0.67";
 }
