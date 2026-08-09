@@ -13,6 +13,7 @@ let
     sha256 = release.sourceSha256;
     url = "https://github.com/jdx/mise/archive/refs/tags/v${release.version}.tar.gz";
   };
+  usageBin = pkgs.lib.getExe pkgs.usage;
 in
 mkPrebuilt {
   pname = "mise";
@@ -45,9 +46,14 @@ mkPrebuilt {
       "mise-${release.version}/completions/mise.bash" \
       "mise-${release.version}/completions/mise.fish"
 
+    substituteInPlace completions/{mise.bash,mise.fish} \
+      --replace-fail "type -P usage" "type -P ${usageBin}"
+
+    substituteInPlace completions/_mise \
+      --replace-fail "type -p usage" "type -p ${usageBin}"
+
     substituteInPlace completions/{_mise,mise.bash,mise.fish} \
-      --replace-fail "-p usage" "-p ${pkgs.lib.getExe pkgs.usage}" \
-      --replace-fail "usage complete-word" "${pkgs.lib.getExe pkgs.usage} complete-word"
+      --replace-fail "usage complete-word" "${usageBin} complete-word"
 
     installShellCompletion \
       --bash completions/mise.bash \

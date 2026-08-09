@@ -449,18 +449,26 @@ pkgs.writeShellApplication {
       fi
 
       echo "==> Discovering vendorHash via build attempt..." >&2
-      buildOutput=$(nix build ".#$pkg" 2>&1 || true)
-      rm -f result
-
-      correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
-
-      if [[ -n "$correctHash" ]]; then
-        vendorHash="$correctHash"
-        echo "==> Discovered vendorHash: $vendorHash" >&2
-        write_release_file "$pkg" "$releaseFile"
+      if buildOutput=$(nix build ".#$pkg" 2>&1); then
+        echo "==> vendorHash still valid" >&2
       else
-        echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
+        correctHash=""
+        if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
+          correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
+        fi
+
+        if [[ -n "$correctHash" ]]; then
+          vendorHash="$correctHash"
+          echo "==> Discovered vendorHash: $vendorHash" >&2
+          if ! write_release_file "$pkg" "$releaseFile"; then
+            add_failure "$pkg" "failed to write $releaseFile"
+            continue
+          fi
+        else
+          echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
+        fi
       fi
+      rm -f result
 
       updates+=("$pkg:$(display_version "$current_version"):$version")
       updated_packages+=("$pkg")
