@@ -47,13 +47,13 @@ mkPrebuilt {
       "mise-${release.version}/completions/mise.fish"
 
     substituteInPlace completions/{mise.bash,mise.fish} \
-      --replace-fail "type -P usage" "type -P ${usageBin}"
+      --replace-quiet "type -P usage" "type -P ${usageBin}"
 
     substituteInPlace completions/_mise \
-      --replace-fail "type -p usage" "type -p ${usageBin}"
+      --replace-quiet "type -p usage" "type -p ${usageBin}"
 
     substituteInPlace completions/{_mise,mise.bash,mise.fish} \
-      --replace-fail "usage complete-word" "${usageBin} complete-word"
+      --replace-quiet "usage complete-word" "${usageBin} complete-word"
 
     installShellCompletion \
       --bash completions/mise.bash \
