@@ -24,6 +24,13 @@
 
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
 
+      disabledPackages = [
+        "claude-code"
+        "kiro"
+        "kiro-cli"
+        "warp-terminal"
+      ];
+
       packagesConfig = {
         "antigravity" = {
           baseUrl = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
@@ -97,6 +104,8 @@
         };
       };
 
+      activePackagesConfig = builtins.removeAttrs packagesConfig disabledPackages;
+
       goPackagesConfig = {
         "bootdev" = {
           repoOwner = "bootdotdev";
@@ -128,7 +137,7 @@
         // {
           release = import ./releases/${name}.nix;
         }
-      ) packagesConfig;
+      ) activePackagesConfig;
 
       generatedPackages =
         (builtins.mapAttrs (
@@ -201,7 +210,9 @@
 
       overlays.default =
         _: prev:
-        builtins.intersectAttrs packagesConfig (self.packages.${prev.stdenv.hostPlatform.system} or { })
+        builtins.intersectAttrs activePackagesConfig (
+          self.packages.${prev.stdenv.hostPlatform.system} or { }
+        )
         // nixpkgs.lib.genAttrs goPackageNames (
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
         );
