@@ -247,232 +247,352 @@ pkgs.writeShellApplication {
 
     git pull || echo "Warning: git pull failed, continuing..." >&2
 
+    job_dir=$(mktemp -d)
+    job_parent_pid="$BASHPID"
+    job_pids=()
+    job_packages=()
+    job_status_files=()
+    job_result_files=()
+    job_id=0
+
+    cleanup_jobs() {
+      if [[ "$BASHPID" == "$job_parent_pid" ]]; then
+        rm -rf "$job_dir"
+      fi
+    }
+
+    trap cleanup_jobs EXIT
+
+    collect_job_failure() {
+      local pkg="$1"
+      local message="$2"
+
+      failurePackages+=("$pkg")
+      failureMessages+=("$message")
+    }
+
     meta='${metaJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
 
     for pkg in $package_names; do
-      baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
-      urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
-      releaseFile="releases/$pkg.nix"
-      completionsSha=""
-      sha=""
-      sourceSha=""
-      url=""
-      version=""
-      vscodeVersion=""
+      job_id=$((job_id + 1))
+      status_file="$job_dir/$job_id.status"
+      result_file="$job_dir/$job_id.result"
+      : > "$result_file"
+      job_packages+=("$pkg")
+      job_status_files+=("$status_file")
+      job_result_files+=("$result_file")
 
-      echo "==> Updating $pkg..." >&2
+      (
+        job_failed=false
 
-      if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
-        metadata=$(curl -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
-        url=$(jq -r '.url // ""' <<<"$metadata")
-        version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
-        vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
-      elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
-        metadata=$(curl -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
-        url=$(jq -r '.url // ""' <<<"$metadata")
-        version=$(jq -r '.version // ""' <<<"$metadata")
-      elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
-        version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
-      elif [[ "$baseUrl" == *"github.com"* ]]; then
-        repoBase="''${baseUrl%/releases/download}"
-        redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
-        tag=$(basename "$redirect" 2>/dev/null || true)
-        case "$pkg" in
-          bun)
-            version="''${tag#bun-v}"
-            ;;
-          *)
-            version="''${tag#v}"
-            ;;
-        esac
-      elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
-        manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
-        version=$(jq -r '.version // ""' <<<"$manifest")
-      elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
-        metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
-        version=$(jq -r '.currentRelease // ""' <<<"$metadata")
-      elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
-        pkgName=$(basename "$baseUrl")
-        metadata=$(curl -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
-        version=$(jq -r '.version // ""' <<<"$metadata")
-      elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
-        redirect=$(curl -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
-        version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
-      else
-        add_failure "$pkg" "automatic version discovery not supported"
-        continue
-      fi
+        add_failure() {
+          local failure_pkg="$1"
+          local failure_message="$2"
 
-      if [[ -z "$version" ]]; then
-        add_failure "$pkg" "failed to determine version"
-        continue
-      fi
+          job_failed=true
+          printf '%s\n' "$failure_message" > "$status_file"
+          echo "Error: $failure_pkg: $failure_message" >&2
+        }
 
-      current_version=$(release_field_value "$releaseFile" "version")
+        for job_pkg in $pkg; do
+          pkg="$job_pkg"
+          baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
+          urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
+          releaseFile="releases/$pkg.nix"
+          completionsSha=""
+          sha=""
+          sourceSha=""
+          url=""
+          version=""
+          vscodeVersion=""
 
-      if [[ "$current_version" == "$version" ]]; then
-        if ! validate_release_file "$pkg" "$releaseFile"; then
-          continue
-        fi
+          echo "==> Updating $pkg..." >&2
 
-        echo "==> $pkg already at version $version" >&2
-        continue
-      fi
+          if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
+            metadata=$(curl -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+            url=$(jq -r '.url // ""' <<<"$metadata")
+            version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
+            vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
+          elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
+            metadata=$(curl -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
+            url=$(jq -r '.url // ""' <<<"$metadata")
+            version=$(jq -r '.version // ""' <<<"$metadata")
+          elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
+            version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+          elif [[ "$baseUrl" == *"github.com"* ]]; then
+            repoBase="''${baseUrl%/releases/download}"
+            redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
+            tag=$(basename "$redirect" 2>/dev/null || true)
+            case "$pkg" in
+              bun)
+                version="''${tag#bun-v}"
+                ;;
+              *)
+                version="''${tag#v}"
+                ;;
+            esac
+          elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
+            manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
+            version=$(jq -r '.version // ""' <<<"$manifest")
+          elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
+            metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+            version=$(jq -r '.currentRelease // ""' <<<"$metadata")
+          elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
+            pkgName=$(basename "$baseUrl")
+            metadata=$(curl -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
+            version=$(jq -r '.version // ""' <<<"$metadata")
+          elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
+            redirect=$(curl -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
+            version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
+          else
+            add_failure "$pkg" "automatic version discovery not supported"
+            continue
+          fi
 
-      echo "==> Updating $pkg from $current_version to $version..." >&2
+          if [[ -z "$version" ]]; then
+            add_failure "$pkg" "failed to determine version"
+            continue
+          fi
 
-      if [[ -z "$url" ]]; then
-        url="''${urlTemplate//\{version\}/$version}"
-      fi
+          current_version=$(release_field_value "$releaseFile" "version")
 
-      if [[ -z "$url" ]]; then
-        add_failure "$pkg" "failed to determine download URL"
-        continue
-      fi
+          if [[ "$current_version" == "$version" ]]; then
+            if ! validate_release_file "$pkg" "$releaseFile"; then
+              continue
+            fi
 
-      tmp=$(mktemp)
+            echo "==> $pkg already at version $version" >&2
+            continue
+          fi
 
-      if ! curl -L -s -o "$tmp" "$url"; then
-        add_failure "$pkg" "failed to download binary version $version"
-        rm -f "$tmp"
-        continue
-      fi
+          echo "==> Updating $pkg from $current_version to $version..." >&2
 
-      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
-      if [[ -z "$sha" ]]; then
-        add_failure "$pkg" "failed to compute sha256 for $url"
-        rm -f "$tmp"
-        continue
-      fi
+          if [[ -z "$url" ]]; then
+            url="''${urlTemplate//\{version\}/$version}"
+          fi
 
-      if [[ "$pkg" == "kiro" ]]; then
-        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
-      fi
+          if [[ -z "$url" ]]; then
+            add_failure "$pkg" "failed to determine download URL"
+            continue
+          fi
 
-      if [[ "$pkg" == "mise" ]]; then
-        sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
-        if [[ -z "$sourceSha" ]]; then
-          add_failure "$pkg" "failed to determine sourceSha256"
+          tmp=$(mktemp)
+
+          if ! curl -L -s -o "$tmp" "$url"; then
+            add_failure "$pkg" "failed to download binary version $version"
+            rm -f "$tmp"
+            continue
+          fi
+
+          sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+          if [[ -z "$sha" ]]; then
+            add_failure "$pkg" "failed to compute sha256 for $url"
+            rm -f "$tmp"
+            continue
+          fi
+
+          if [[ "$pkg" == "kiro" ]]; then
+            vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
+          fi
+
+          if [[ "$pkg" == "mise" ]]; then
+            sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
+            if [[ -z "$sourceSha" ]]; then
+              add_failure "$pkg" "failed to determine sourceSha256"
+              rm -f "$tmp"
+              continue
+            fi
+          fi
+
+          if [[ "$pkg" == "tinymist" ]]; then
+            completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
+            completionsSha=$(download_source_sha256 "$completionsUrl") || true
+            completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
+            if [[ -z "$completionsSha" ]]; then
+              add_failure "$pkg" "failed to determine completionsSha256"
+              rm -f "$tmp"
+              continue
+            fi
+          fi
+
+          if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
+            add_failure "$pkg" "failed to determine vscodeVersion"
+            rm -f "$tmp"
+            continue
+          fi
+
           rm -f "$tmp"
-          continue
-        fi
-      fi
 
-      if [[ "$pkg" == "tinymist" ]]; then
-        completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
-        completionsSha=$(download_source_sha256 "$completionsUrl") || true
-        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
-        if [[ -z "$completionsSha" ]]; then
-          add_failure "$pkg" "failed to determine completionsSha256"
-          rm -f "$tmp"
-          continue
-        fi
-      fi
+          if ! validate_release_values "$pkg"; then
+            continue
+          fi
 
-      if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
-        add_failure "$pkg" "failed to determine vscodeVersion"
-        rm -f "$tmp"
-        continue
-      fi
-
-      rm -f "$tmp"
-
-      if ! validate_release_values "$pkg"; then
-        continue
-      fi
-
-      if ! write_release_file "$pkg" "$releaseFile"; then
-        add_failure "$pkg" "failed to write $releaseFile"
-        continue
-      fi
-
-      updates+=("$pkg:$(display_version "$current_version"):$version")
-      updated_packages+=("$pkg")
-      echo "==> Wrote $releaseFile" >&2
-    done
-
-    goPackages='${goPackagesJson}'
-    for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
-      releaseFile="releases/$pkg.nix"
-      sourceSha=""
-      vendorHash=""
-      version=""
-
-      echo "==> Updating Go package $pkg..." >&2
-
-      repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
-      repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
-
-      tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' || true)
-      version="''${tag#v}"
-
-      if [[ -z "$version" ]]; then
-        add_failure "$pkg" "failed to determine version via gh api"
-        continue
-      fi
-
-      current_version=$(release_field_value "$releaseFile" "version")
-
-      if [[ "$current_version" == "$version" ]]; then
-        if ! validate_release_file "$pkg" "$releaseFile"; then
-          continue
-        fi
-
-        echo "==> $pkg already at version $version" >&2
-        continue
-      fi
-
-      echo "==> Updating $pkg from $current_version to $version..." >&2
-
-      sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
-      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
-      if [[ -z "$sourceSha" ]]; then
-        add_failure "$pkg" "failed to compute sourceSha256"
-        continue
-      fi
-      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
-
-      vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      vendorHash=$(release_field_value "$releaseFile" "vendorHash")
-      if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
-        vendorHash="$vendorHashPlaceholder"
-      fi
-
-      if ! validate_release_values "$pkg"; then
-        continue
-      fi
-
-      if ! write_release_file "$pkg" "$releaseFile"; then
-        add_failure "$pkg" "failed to write $releaseFile"
-        continue
-      fi
-
-      echo "==> Discovering vendorHash via build attempt..." >&2
-      if buildOutput=$(nix build ".#$pkg" 2>&1); then
-        echo "==> vendorHash still valid" >&2
-      else
-        correctHash=""
-        if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
-          correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
-        fi
-
-        if [[ -n "$correctHash" ]]; then
-          vendorHash="$correctHash"
-          echo "==> Discovered vendorHash: $vendorHash" >&2
           if ! write_release_file "$pkg" "$releaseFile"; then
             add_failure "$pkg" "failed to write $releaseFile"
             continue
           fi
-        else
-          echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
-        fi
-      fi
-      rm -f result
 
-      updates+=("$pkg:$(display_version "$current_version"):$version")
-      updated_packages+=("$pkg")
-      echo "==> Wrote $releaseFile" >&2
+          printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
+          echo "==> Wrote $releaseFile" >&2
+        done
+
+        if [[ "$job_failed" == "true" ]]; then
+          exit 1
+        fi
+        printf '%s\n' success > "$status_file"
+      ) &
+      job_pids+=("$!")
+    done
+
+    goPackages='${goPackagesJson}'
+    for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
+      job_id=$((job_id + 1))
+      status_file="$job_dir/$job_id.status"
+      result_file="$job_dir/$job_id.result"
+      : > "$result_file"
+      job_packages+=("$pkg")
+      job_status_files+=("$status_file")
+      job_result_files+=("$result_file")
+
+      (
+        job_failed=false
+
+        add_failure() {
+          local failure_pkg="$1"
+          local failure_message="$2"
+
+          job_failed=true
+          printf '%s\n' "$failure_message" > "$status_file"
+          echo "Error: $failure_pkg: $failure_message" >&2
+        }
+
+        for job_pkg in $pkg; do
+          pkg="$job_pkg"
+          releaseFile="releases/$pkg.nix"
+          sourceSha=""
+          vendorHash=""
+          version=""
+
+          echo "==> Updating Go package $pkg..." >&2
+
+          repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
+          repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
+
+          tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' || true)
+          version="''${tag#v}"
+
+          if [[ -z "$version" ]]; then
+            add_failure "$pkg" "failed to determine version via gh api"
+            continue
+          fi
+
+          current_version=$(release_field_value "$releaseFile" "version")
+
+          if [[ "$current_version" == "$version" ]]; then
+            if ! validate_release_file "$pkg" "$releaseFile"; then
+              continue
+            fi
+
+            echo "==> $pkg already at version $version" >&2
+            continue
+          fi
+
+          echo "==> Updating $pkg from $current_version to $version..." >&2
+
+          sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
+          sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+          if [[ -z "$sourceSha" ]]; then
+            add_failure "$pkg" "failed to compute sourceSha256"
+            continue
+          fi
+          sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+
+          vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          vendorHash=$(release_field_value "$releaseFile" "vendorHash")
+          if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
+            vendorHash="$vendorHashPlaceholder"
+          fi
+
+          if ! validate_release_values "$pkg"; then
+            continue
+          fi
+
+          if ! write_release_file "$pkg" "$releaseFile"; then
+            add_failure "$pkg" "failed to write $releaseFile"
+            continue
+          fi
+
+          echo "==> Discovering vendorHash via build attempt..." >&2
+          if buildOutput=$(nix build --no-link ".#$pkg" 2>&1); then
+            echo "==> vendorHash still valid" >&2
+          else
+            correctHash=""
+            if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
+              correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
+            fi
+
+            if [[ -n "$correctHash" ]]; then
+              vendorHash="$correctHash"
+              echo "==> Discovered vendorHash: $vendorHash" >&2
+              if ! write_release_file "$pkg" "$releaseFile"; then
+                add_failure "$pkg" "failed to write $releaseFile"
+                continue
+              fi
+            else
+              echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
+            fi
+          fi
+
+          printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
+          echo "==> Wrote $releaseFile" >&2
+        done
+
+        if [[ "$job_failed" == "true" ]]; then
+          exit 1
+        fi
+        printf '%s\n' success > "$status_file"
+      ) &
+      job_pids+=("$!")
+    done
+
+    for job_index in "''${!job_pids[@]}"; do
+      pkg="''${job_packages[$job_index]}"
+      status_file="''${job_status_files[$job_index]}"
+      result_file="''${job_result_files[$job_index]}"
+      message=""
+
+      if ! wait "''${job_pids[$job_index]}"; then
+        message=$(cat "$status_file" 2>/dev/null || true)
+        if [[ -z "$message" ]]; then
+          message="package update job failed"
+          echo "Error: $pkg: $message" >&2
+        fi
+        collect_job_failure "$pkg" "$message"
+        continue
+      fi
+
+      message=$(cat "$status_file" 2>/dev/null || true)
+      if [[ "$message" != "success" ]]; then
+        if [[ -z "$message" ]]; then
+          message="package update job failed"
+          echo "Error: $pkg: $message" >&2
+        fi
+        collect_job_failure "$pkg" "$message"
+        continue
+      fi
+
+      if [[ -s "$result_file" ]]; then
+        mapfile -t job_result < "$result_file"
+        if [[ "''${#job_result[@]}" -ne 2 ]]; then
+          message="invalid package update result"
+          echo "Error: $pkg: $message" >&2
+          collect_job_failure "$pkg" "$message"
+          continue
+        fi
+        updates+=("$pkg:$(display_version "''${job_result[0]}"):''${job_result[1]}")
+        updated_packages+=("$pkg")
+      fi
     done
 
     if [[ "''${#failurePackages[@]}" -gt 0 ]]; then
