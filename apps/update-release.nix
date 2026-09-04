@@ -165,7 +165,7 @@ pkgs.writeShellApplication {
 
     usage() {
       cat <<'EOF'
-    Usage: update-release [OPTIONS]
+    Usage: update-release [OPTIONS] [DIR]
 
     OPTIONS:
       --commit             Commit updated release.nix and flake.lock
@@ -239,11 +239,19 @@ pkgs.writeShellApplication {
         shift
         ;;
       *)
-        usage
-        exit 1
+        if [[ "$1" != -* ]]; then
+          root="$1"
+          shift
+        else
+          usage
+          exit 1
+        fi
         ;;
       esac
     done
+
+    root="''${root:-$(pwd)}"
+    cd "$root" || exit 1
 
     git pull || echo "Warning: git pull failed, continuing..." >&2
 
