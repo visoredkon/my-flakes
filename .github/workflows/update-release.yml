@@ -5,12 +5,15 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: update-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  update:
+  update-my-flakes:
     runs-on: ubuntu-slim
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
@@ -19,19 +22,10 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
 
-      - name: checkout hytale-launcher-flake
-        uses: actions/checkout@v6
-        with:
-          path: hytale-launcher-flake
-          repository: visoredkon/hytale-launcher-flake
-          token: ${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}
-
       - name: config-git
         run: |
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git -C hytale-launcher-flake remote set-url origin \
-            https://x-access-token:${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}@github.com/visoredkon/hytale-launcher-flake.git
 
       - name: install-nix
         uses: cachix/install-nix-action@v31
@@ -39,6 +33,30 @@ jobs:
       - name: update my-flakes
         run: nix run .#update-release -- --push
 
+  update-hytale-launcher:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}
+      GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+      GIT_AUTHOR_NAME: ${{ github.actor }}
+    steps:
+      - name: checkout hytale-launcher-flake
+        uses: actions/checkout@v6
+        with:
+          repository: visoredkon/hytale-launcher-flake
+          token: ${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}
+
+      - name: config-git
+        run: |
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git remote set-url origin \
+            https://x-access-token:${{ secrets.ACTION_ACCESS_HYTALE_LAUNCHER_FLAKE }}@github.com/visoredkon/hytale-launcher-flake.git
+
+      - name: install-nix
+        uses: cachix/install-nix-action@v31
+
       - name: update hytale-launcher
         run: nix run .#update-release -- --push
-        working-directory: hytale-launcher-flake

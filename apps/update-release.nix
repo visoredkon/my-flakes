@@ -75,7 +75,7 @@ pkgs.writeShellApplication {
 
       tmp=$(mktemp)
 
-      if ! curl -L -s -o "$tmp" "$url"; then
+      if ! curl_retry -L -s -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo ""
         return 1
@@ -263,6 +263,36 @@ pkgs.writeShellApplication {
 
     trap cleanup_jobs EXIT
 
+    max_jobs=$(nproc 2>/dev/null || echo 6)
+    if [[ "$max_jobs" -gt 6 ]]; then
+      max_jobs=6
+    fi
+    if [[ "$max_jobs" -lt 1 ]]; then
+      max_jobs=1
+    fi
+
+    running_pids=()
+
+    throttle_jobs() {
+      while (( ''${#running_pids[@]} >= max_jobs )); do
+        if ! wait -n 2>/dev/null; then
+          wait "''${running_pids[0]}" 2>/dev/null || true
+        fi
+        local tmp_pids=()
+        local pid
+        for pid in "''${running_pids[@]}"; do
+          if kill -0 "$pid" 2>/dev/null; then
+            tmp_pids+=("$pid")
+          fi
+        done
+        running_pids=("''${tmp_pids[@]}")
+      done
+    }
+
+    curl_retry() {
+      curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10 "$@"
+    }
+
     collect_job_failure() {
       local pkg="$1"
       local message="$2"
@@ -310,19 +340,19 @@ pkgs.writeShellApplication {
           echo "==> Updating $pkg..." >&2
 
           if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
-            metadata=$(curl -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+            metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
             url=$(jq -r '.url // ""' <<<"$metadata")
             version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
             vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
           elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
-            metadata=$(curl -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
+            metadata=$(curl_retry -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
             url=$(jq -r '.url // ""' <<<"$metadata")
             version=$(jq -r '.version // ""' <<<"$metadata")
           elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
-            version=$(curl -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+            version=$(curl_retry -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
           elif [[ "$baseUrl" == *"github.com"* ]]; then
             repoBase="''${baseUrl%/releases/download}"
-            redirect=$(curl -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
+            redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
             tag=$(basename "$redirect" 2>/dev/null || true)
             case "$pkg" in
               bun)
@@ -333,17 +363,17 @@ pkgs.writeShellApplication {
                 ;;
             esac
           elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
-            manifest=$(curl -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
+            manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
             version=$(jq -r '.version // ""' <<<"$manifest")
           elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
-            metadata=$(curl -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+            metadata=$(curl_retry -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
             version=$(jq -r '.currentRelease // ""' <<<"$metadata")
           elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
             pkgName=$(basename "$baseUrl")
-            metadata=$(curl -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
+            metadata=$(curl_retry -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
             version=$(jq -r '.version // ""' <<<"$metadata")
           elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
-            redirect=$(curl -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
+            redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
             version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
           else
             add_failure "$pkg" "automatic version discovery not supported"
@@ -379,7 +409,7 @@ pkgs.writeShellApplication {
 
           tmp=$(mktemp)
 
-          if ! curl -L -s -o "$tmp" "$url"; then
+          if ! curl_retry -L -s -o "$tmp" "$url"; then
             add_failure "$pkg" "failed to download binary version $version"
             rm -f "$tmp"
             continue
@@ -443,6 +473,8 @@ pkgs.writeShellApplication {
         printf '%s\n' success > "$status_file"
       ) &
       job_pids+=("$!")
+      running_pids+=("$!")
+      throttle_jobs
     done
 
     goPackages='${goPackagesJson}'
@@ -554,6 +586,12 @@ pkgs.writeShellApplication {
         printf '%s\n' success > "$status_file"
       ) &
       job_pids+=("$!")
+      running_pids+=("$!")
+      throttle_jobs
+    done
+
+    for pid in "''${running_pids[@]}"; do
+      wait "$pid" 2>/dev/null || true
     done
 
     for job_index in "''${!job_pids[@]}"; do
@@ -562,15 +600,7 @@ pkgs.writeShellApplication {
       result_file="''${job_result_files[$job_index]}"
       message=""
 
-      if ! wait "''${job_pids[$job_index]}"; then
-        message=$(cat "$status_file" 2>/dev/null || true)
-        if [[ -z "$message" ]]; then
-          message="package update job failed"
-          echo "Error: $pkg: $message" >&2
-        fi
-        collect_job_failure "$pkg" "$message"
-        continue
-      fi
+      wait "''${job_pids[$job_index]}" 2>/dev/null || true
 
       message=$(cat "$status_file" 2>/dev/null || true)
       if [[ "$message" != "success" ]]; then
