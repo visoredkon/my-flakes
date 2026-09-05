@@ -41,9 +41,25 @@ pkgs.writeShellApplication {
       local pkg="$1"
       local message="$2"
 
-      failurePackages+=("$pkg")
-      failureMessages+=("$message")
+      if [[ -n "''${job_failed+x}" ]]; then
+        job_failed=true
+        printf '%s\n' "$message" > "$status_file"
+      else
+        failurePackages+=("$pkg")
+        failureMessages+=("$message")
+      fi
       echo "Error: $pkg: $message" >&2
+    }
+
+    prepare_job() {
+      local pkg="$1"
+      job_id=$((job_id + 1))
+      status_file="$job_dir/$job_id.status"
+      result_file="$job_dir/$job_id.result"
+      : > "$result_file"
+      job_packages+=("$pkg")
+      job_status_files+=("$status_file")
+      job_result_files+=("$result_file")
     }
 
     display_version() {
@@ -317,25 +333,10 @@ pkgs.writeShellApplication {
     package_names=$(jq -r 'keys[]' <<<"$meta")
 
     for pkg in $package_names; do
-      job_id=$((job_id + 1))
-      status_file="$job_dir/$job_id.status"
-      result_file="$job_dir/$job_id.result"
-      : > "$result_file"
-      job_packages+=("$pkg")
-      job_status_files+=("$status_file")
-      job_result_files+=("$result_file")
+      prepare_job "$pkg"
 
       (
         job_failed=false
-
-        add_failure() {
-          local failure_pkg="$1"
-          local failure_message="$2"
-
-          job_failed=true
-          printf '%s\n' "$failure_message" > "$status_file"
-          echo "Error: $failure_pkg: $failure_message" >&2
-        }
 
         for job_pkg in $pkg; do
           pkg="$job_pkg"
@@ -491,25 +492,10 @@ pkgs.writeShellApplication {
 
     goPackages='${goPackagesJson}'
     for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
-      job_id=$((job_id + 1))
-      status_file="$job_dir/$job_id.status"
-      result_file="$job_dir/$job_id.result"
-      : > "$result_file"
-      job_packages+=("$pkg")
-      job_status_files+=("$status_file")
-      job_result_files+=("$result_file")
+      prepare_job "$pkg"
 
       (
         job_failed=false
-
-        add_failure() {
-          local failure_pkg="$1"
-          local failure_message="$2"
-
-          job_failed=true
-          printf '%s\n' "$failure_message" > "$status_file"
-          echo "Error: $failure_pkg: $failure_message" >&2
-        }
 
         for job_pkg in $pkg; do
           pkg="$job_pkg"
