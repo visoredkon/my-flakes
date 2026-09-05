@@ -163,6 +163,10 @@ pkgs.writeShellApplication {
       esac
     }
 
+    parse_update() {
+      IFS=':' read -r pkg from_version to_version <<<"$1"
+    }
+
     usage() {
       cat <<'EOF'
     Usage: update-release [OPTIONS] [DIR]
@@ -253,7 +257,7 @@ pkgs.writeShellApplication {
     root="''${root:-$(pwd)}"
     cd "$root" || exit 1
 
-    git pull || echo "Warning: git pull failed, continuing..." >&2
+    git pull || echo "git pull failed, continuing anyway" >&2
 
     job_dir=$(mktemp -d)
     job_parent_pid="$BASHPID"
@@ -345,7 +349,7 @@ pkgs.writeShellApplication {
           version=""
           vscodeVersion=""
 
-          echo "==> Updating $pkg..." >&2
+          echo "check $pkg from $baseUrl" >&2
 
           if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
             metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
@@ -400,11 +404,11 @@ pkgs.writeShellApplication {
               continue
             fi
 
-            echo "==> $pkg already at version $version" >&2
+            echo "$pkg already on $version" >&2
             continue
           fi
 
-          echo "==> Updating $pkg from $current_version to $version..." >&2
+          echo "$pkg: $current_version -> $version" >&2
 
           if [[ -z "$url" ]]; then
             url="''${urlTemplate//\{version\}/$version}"
@@ -472,7 +476,7 @@ pkgs.writeShellApplication {
           fi
 
           printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
-          echo "==> Wrote $releaseFile" >&2
+          echo "wrote $releaseFile" >&2
         done
 
         if [[ "$job_failed" == "true" ]]; then
@@ -513,11 +517,10 @@ pkgs.writeShellApplication {
           sourceSha=""
           vendorHash=""
           version=""
-
-          echo "==> Updating Go package $pkg..." >&2
-
           repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
           repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
+
+          echo "check go package $pkg ($repoOwner/$repoName)" >&2
 
           tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' || true)
           version="''${tag#v}"
@@ -534,11 +537,11 @@ pkgs.writeShellApplication {
               continue
             fi
 
-            echo "==> $pkg already at version $version" >&2
+            echo "$pkg already on $version" >&2
             continue
           fi
 
-          echo "==> Updating $pkg from $current_version to $version..." >&2
+          echo "$pkg: $current_version -> $version" >&2
 
           sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
           sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
@@ -563,9 +566,9 @@ pkgs.writeShellApplication {
             continue
           fi
 
-          echo "==> Discovering vendorHash via build attempt..." >&2
+          echo "get vendorHash for $pkg, need build" >&2
           if buildOutput=$(nix build --no-link ".#$pkg" 2>&1); then
-            echo "==> vendorHash still valid" >&2
+            echo "vendorHash unchanged" >&2
           else
             correctHash=""
             if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
@@ -574,18 +577,18 @@ pkgs.writeShellApplication {
 
             if [[ -n "$correctHash" ]]; then
               vendorHash="$correctHash"
-              echo "==> Discovered vendorHash: $vendorHash" >&2
+              echo "found vendorHash: $vendorHash" >&2
               if ! write_release_file "$pkg" "$releaseFile"; then
                 add_failure "$pkg" "failed to write $releaseFile"
                 continue
               fi
             else
-              echo "==> WARNING: vendorHash discovery failed. Set manually or run 'nix build .#$pkg'." >&2
+              echo "could not figure out vendorHash, set it by hand or run nix build .#$pkg" >&2
             fi
           fi
 
           printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
-          echo "==> Wrote $releaseFile" >&2
+          echo "wrote $releaseFile" >&2
         done
 
         if [[ "$job_failed" == "true" ]]; then
@@ -613,7 +616,7 @@ pkgs.writeShellApplication {
       message=$(cat "$status_file" 2>/dev/null || true)
       if [[ "$message" != "success" ]]; then
         if [[ -z "$message" ]]; then
-          message="package update job failed"
+          message="failed to update package"
           echo "Error: $pkg: $message" >&2
         fi
         collect_job_failure "$pkg" "$message"
@@ -623,7 +626,7 @@ pkgs.writeShellApplication {
       if [[ -s "$result_file" ]]; then
         mapfile -t job_result < "$result_file"
         if [[ "''${#job_result[@]}" -ne 2 ]]; then
-          message="invalid package update result"
+          message="failed to parse package update result"
           echo "Error: $pkg: $message" >&2
           collect_job_failure "$pkg" "$message"
           continue
@@ -634,35 +637,35 @@ pkgs.writeShellApplication {
     done
 
     if [[ "''${#failurePackages[@]}" -gt 0 ]]; then
-      echo "==> Failed packages:" >&2
+      echo "failed:" >&2
       for failureIndex in "''${!failurePackages[@]}"; do
         echo "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}" >&2
       done
       exit 1
     fi
 
-    if [[ "''${#updates[@]}" -gt 0 ]]; then
-      echo "==> Formatting files..." >&2
-      nix --extra-experimental-features "nix-command flakes" fmt || true
+    echo "update flake.lock to latest inputs" >&2
+    nix --extra-experimental-features "nix-command flakes" flake update || true
 
-      echo "==> Updating flake.lock..." >&2
-      nix --extra-experimental-features "nix-command flakes" flake update || true
-    else
-      echo "==> No updates" >&2
+    echo "format" >&2
+    nix --extra-experimental-features "nix-command flakes" fmt || true
+
+    if [[ "''${#updates[@]}" -eq 0 ]]; then
+      echo "nothing new" >&2
     fi
 
     if [[ "$COMMIT" == "true" ]]; then
-      echo "==> Committing changes..." >&2
+      echo "stage releases and flake.lock for commit" >&2
       git add releases/ flake.lock
 
       if git diff --cached --quiet; then
-        echo "==> No staged changes to commit" >&2
+        echo "nothing to commit" >&2
       else
         update_count=''${#updates[@]}
         if [[ "$update_count" -eq 0 ]]; then
           commit_subject="chore(version): refresh release metadata"
         elif [[ "$update_count" -eq 1 ]]; then
-          IFS=':' read -r pkg from_version to_version <<<"''${updates[0]}"
+          parse_update "''${updates[0]}"
           commit_subject="chore(version): bump $pkg $from_version -> $to_version"
         elif [[ "$update_count" -le 3 ]]; then
           commit_subject="chore(version): bump $(join_packages "''${updated_packages[@]}")"
@@ -675,11 +678,11 @@ pkgs.writeShellApplication {
           echo "$commit_subject"
           echo
           if [[ "$update_count" -eq 0 ]]; then
-            echo "Updated release artifacts and lockfile."
+            echo "sync lockfile and release metadata"
           else
-            echo "Updated release artifacts:"
+            echo "bumped:"
             for update in "''${updates[@]}"; do
-              IFS=':' read -r pkg from_version to_version <<<"$update"
+              parse_update "$update"
               echo "- $pkg: $from_version -> $to_version"
             done
           fi
@@ -689,12 +692,12 @@ pkgs.writeShellApplication {
         rm -f "$commit_message_file"
 
         if [[ "$PUSH" == "true" ]]; then
-          echo "==> Pushing changes..." >&2
+          echo "push to origin" >&2
           git push
         fi
       fi
     fi
 
-    echo "==> Done" >&2
+    echo "done" >&2
   '';
 }
