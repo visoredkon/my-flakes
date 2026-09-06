@@ -23,6 +23,7 @@
       };
 
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
+      mkProtonCachyos = pkgs.callPackage ./packages/mk-proton-cachyos.nix { };
 
       disabledPackages = [
         "claude-code"
@@ -81,6 +82,10 @@
           baseUrl = "https://github.com/anomalyco/opencode/releases/download";
           binName = "opencode";
           urlTemplate = "${baseUrl}/v{version}/opencode-linux-x64.tar.gz";
+        };
+        "proton-cachyos-x86_64-v3" = rec {
+          baseUrl = "https://github.com/CachyOS/proton-cachyos";
+          urlTemplate = "${baseUrl}/releases/download/{version}/proton-{version}-x86_64_v3.tar.xz";
         };
         "typescript-language-server" = rec {
           baseUrl = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server";
@@ -144,6 +149,7 @@
           name: meta:
           pkgs.callPackage ./packages/${name}.nix {
             inherit mkPrebuilt;
+            inherit mkProtonCachyos;
             inherit (meta) release urlTemplate;
           }
         ) (builtins.removeAttrs packageMetadata goPackageNames))
@@ -163,9 +169,9 @@
     in
     {
       apps.${system} =
-        (builtins.mapAttrs (
-          name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}"
-        ) packageMetadata)
+        (builtins.mapAttrs (name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}") (
+          nixpkgs.lib.filterAttrs (_: meta: meta ? binName) packageMetadata
+        ))
         // {
           "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
           "update-release" = mkApp "${updateRelease}/bin/update-release";
@@ -173,10 +179,17 @@
 
       checks.${system} =
         (builtins.mapAttrs (
-          name: _:
-          pkgs.runCommand "check-${name}" {
-            buildInputs = [ generatedPackages.${name} ];
-          } "touch $out"
+          name: meta:
+          if meta ? binName then
+            pkgs.runCommand "check-${name}" {
+              buildInputs = [ generatedPackages.${name} ];
+            } "touch $out"
+          else
+            pkgs.runCommand "check-${name}" { } ''
+              test -e ${generatedPackages.${name}}
+              test -e ${generatedPackages.${name}.steamcompattool}
+              touch $out
+            ''
         ) packageMetadata)
         // {
           "bootdev" = pkgs.runCommand "check-bootdev" {
