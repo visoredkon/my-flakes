@@ -141,8 +141,8 @@ pkgs.writeShellApplication {
       tinymist)
         echo "completionsSha256 sha256 version"
         ;;
-      typescript-language-server)
-        echo "sha256 version"
+      typescript)
+        echo "sourceSha256 vendorHash version"
         ;;
       *)
         echo "sha256 version"

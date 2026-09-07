@@ -87,11 +87,6 @@
           baseUrl = "https://github.com/CachyOS/proton-cachyos";
           urlTemplate = "${baseUrl}/releases/download/{version}/proton-{version}-x86_64_v3.tar.xz";
         };
-        "typescript-language-server" = rec {
-          baseUrl = "https://registry.npmjs.org/typescript-language-server/-/typescript-language-server";
-          binName = "typescript-language-server";
-          urlTemplate = "${baseUrl}-{version}.tgz";
-        };
         "tinymist" = rec {
           baseUrl = "https://github.com/Myriad-Dreamin/tinymist/releases/download";
           binName = "tinymist";
@@ -109,12 +104,17 @@
         };
       };
 
-      activePackagesConfig = builtins.removeAttrs packagesConfig disabledPackages;
+      activePackagesConfig = removeAttrs packagesConfig disabledPackages;
 
       goPackagesConfig = {
         "bootdev" = {
           repoOwner = "bootdotdev";
           repoName = "bootdev";
+        };
+
+        "typescript" = {
+          repoOwner = "microsoft";
+          repoName = "TypeScript";
         };
       };
 
@@ -152,7 +152,7 @@
             inherit mkProtonCachyos;
             inherit (meta) release urlTemplate;
           }
-        ) (builtins.removeAttrs packageMetadata goPackageNames))
+        ) (removeAttrs packageMetadata goPackageNames))
         // goPackages;
 
       formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
@@ -174,6 +174,7 @@
         ))
         // {
           "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
+          "typescript" = mkApp "${generatedPackages.typescript}/bin/tsc";
           "update-release" = mkApp "${updateRelease}/bin/update-release";
         };
 
@@ -194,6 +195,9 @@
         // {
           "bootdev" = pkgs.runCommand "check-bootdev" {
             buildInputs = [ generatedPackages.bootdev ];
+          } "touch $out";
+          "typescript" = pkgs.runCommand "check-typescript" {
+            buildInputs = [ generatedPackages.typescript ];
           } "touch $out";
           format =
             pkgs.runCommand "check-format"
