@@ -20,7 +20,17 @@ pkgs.stdenvNoCC.mkDerivation {
     url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
   };
 
-  nativeBuildInputs = [ pkgs.xz ];
+  nativeBuildInputs = [
+    pkgs.libarchive
+    pkgs.xz
+  ];
+
+  unpackPhase = ''
+    runHook preUnpack
+    bsdtar -xf $src
+    runHook postUnpack
+  '';
+
   outputs = [
     "out"
     "steamcompattool"
@@ -32,9 +42,15 @@ pkgs.stdenvNoCC.mkDerivation {
     echo "${packageName} is a Steam compatibility tool. Use programs.steam.extraCompatPackages instead." > "$out"
 
     mkdir -p "$steamcompattool"
-    cp -rL "$PWD"/. "$steamcompattool/"
-    rm "$steamcompattool/compatibilitytool.vdf"
-    cp "$PWD/compatibilitytool.vdf" "$steamcompattool/compatibilitytool.vdf"
+
+    srcRoot=$(find . -maxdepth 2 -name "compatibilitytool.vdf" -type f -printf "%h" | head -n1)
+    if [ -z "$srcRoot" ]; then
+      srcRoot="."
+    fi
+
+    cp -rL "$srcRoot"/. "$steamcompattool/"
+    rm -f "$steamcompattool/compatibilitytool.vdf"
+    cp "$srcRoot/compatibilitytool.vdf" "$steamcompattool/compatibilitytool.vdf"
 
     sed -i -r "s|\"display_name\".*|\"display_name\" \"${displayName}\"|" \
       "$steamcompattool/compatibilitytool.vdf"
