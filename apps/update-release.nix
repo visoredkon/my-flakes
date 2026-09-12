@@ -2,6 +2,7 @@
   lib,
   packageMetadata,
   goPackagesConfig ? { },
+  branchSourcesConfig ? { },
   pkgs,
   ...
 }:
@@ -11,6 +12,7 @@ let
     lib.mapAttrs (_: v: { inherit (v) baseUrl urlTemplate; }) packageMetadata
   );
   goPackagesJson = builtins.toJSON goPackagesConfig;
+  branchSourcesJson = builtins.toJSON branchSourcesConfig;
 in
 pkgs.writeShellApplication {
   name = "update-release";
@@ -26,7 +28,7 @@ pkgs.writeShellApplication {
       jq
       nix
     ]
-    ++ lib.optionals (goPackagesConfig != { }) [ gh ];
+    ++ lib.optionals (goPackagesConfig != { } || branchSourcesConfig != { }) [ gh ];
   text = ''
     set -euo pipefail
 
@@ -60,6 +62,10 @@ pkgs.writeShellApplication {
       job_packages+=("$pkg")
       job_status_files+=("$status_file")
       job_result_files+=("$result_file")
+    }
+
+    short_rev() {
+      echo "''${1:0:7}"
     }
 
     display_version() {
@@ -129,20 +135,23 @@ pkgs.writeShellApplication {
       antigravity-cli)
         echo "sha256 url version"
         ;;
-      bootdev)
+      bootdev | elephant | typescript)
         echo "sourceSha256 vendorHash version"
+        ;;
+      pvetui)
+        echo "rev sourceSha256 vendorHash version"
         ;;
       kiro)
         echo "sha256 version vscodeVersion"
+        ;;
+      libfprint | waybar)
+        echo "rev sourceSha256"
         ;;
       mise)
         echo "sha256 sourceSha256 version"
         ;;
       tinymist)
         echo "completionsSha256 sha256 version"
-        ;;
-      typescript)
-        echo "sourceSha256 vendorHash version"
         ;;
       *)
         echo "sha256 version"
@@ -154,6 +163,9 @@ pkgs.writeShellApplication {
       case "$1" in
       completionsSha256)
         echo "$completionsSha"
+        ;;
+      rev)
+        echo "$rev"
         ;;
       sha256)
         echo "$sha"
@@ -181,6 +193,10 @@ pkgs.writeShellApplication {
 
     parse_update() {
       IFS=':' read -r pkg from_version to_version <<<"$1"
+      if [[ "''${pkg:-}" == "libfprint" || "''${pkg:-}" == "waybar" ]]; then
+        from_version=$(short_rev "$from_version")
+        to_version=$(short_rev "$to_version")
+      fi
     }
 
     usage() {
@@ -225,6 +241,14 @@ pkgs.writeShellApplication {
       done
 
       return 0
+    }
+
+    record_update() {
+      local from="$1"
+      local to="$2"
+
+      printf '%s\n%s\n' "$from" "$to" > "$result_file"
+      echo "wrote $releaseFile" >&2
     }
 
     write_release_file() {
@@ -329,262 +353,324 @@ pkgs.writeShellApplication {
       failureMessages+=("$message")
     }
 
+    spawn_job() {
+      local update_func="$1"
+      local target="$2"
+
+      prepare_job "$target"
+
+      (
+        local pkg="$target"
+        job_failed=false
+        "$update_func" "$pkg"
+
+        if [[ "$job_failed" == "true" ]]; then
+          exit 1
+        fi
+        printf '%s\n' success > "$status_file"
+      ) &
+      job_pids+=("$!")
+      running_pids+=("$!")
+      throttle_jobs
+    }
+
+    update_package() {
+      local pkg="$1"
+      baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
+      urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
+      releaseFile="releases/$pkg.nix"
+      url=""
+      version=""
+
+      echo "check $pkg from $baseUrl" >&2
+
+      if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
+        metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+        url=$(jq -r '.url // ""' <<<"$metadata")
+        version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
+        vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
+        metadata=$(curl_retry -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
+        url=$(jq -r '.url // ""' <<<"$metadata")
+        version=$(jq -r '.version // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
+        version=$(curl_retry -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+      elif [[ "$baseUrl" == *"github.com"* ]]; then
+        repoBase="''${baseUrl%/releases/download}"
+        redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
+        tag=$(basename "$redirect" 2>/dev/null || true)
+        case "$pkg" in
+          bun)
+            version="''${tag#bun-v}"
+            ;;
+          *)
+            version="''${tag#v}"
+            ;;
+        esac
+      elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
+        manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
+        version=$(jq -r '.version // ""' <<<"$manifest")
+      elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
+        metadata=$(curl_retry -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+        version=$(jq -r '.currentRelease // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
+        redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
+        version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
+      else
+        add_failure "$pkg" "automatic version discovery not supported"
+        return 1
+      fi
+
+      if [[ -z "$version" ]]; then
+        add_failure "$pkg" "failed to determine version"
+        return 1
+      fi
+
+      current_version=$(release_field_value "$releaseFile" "version")
+
+      if [[ "$current_version" == "$version" ]]; then
+        if ! validate_release_file "$pkg" "$releaseFile"; then
+          return 1
+        fi
+
+        echo "$pkg already on $version" >&2
+        return 0
+      fi
+
+      echo "$pkg: $current_version -> $version" >&2
+
+      if [[ -z "$url" ]]; then
+        url="''${urlTemplate//\{version\}/$version}"
+      fi
+
+      if [[ -z "$url" ]]; then
+        add_failure "$pkg" "failed to determine download URL"
+        return 1
+      fi
+
+      tmp=$(mktemp)
+
+      if ! curl_retry -L -s -o "$tmp" "$url"; then
+        add_failure "$pkg" "failed to download binary version $version"
+        rm -f "$tmp"
+        return 1
+      fi
+
+      sha=""
+      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+      if [[ -z "$sha" ]]; then
+        add_failure "$pkg" "failed to compute sha256 for $url"
+        rm -f "$tmp"
+        return 1
+      fi
+
+      vscodeVersion=""
+      if [[ "$pkg" == "kiro" ]]; then
+        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
+      fi
+
+      if [[ "$pkg" == "mise" ]]; then
+        sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
+        if [[ -z "$sourceSha" ]]; then
+          add_failure "$pkg" "failed to determine sourceSha256"
+          rm -f "$tmp"
+          return 1
+        fi
+      fi
+
+      completionsSha=""
+      if [[ "$pkg" == "tinymist" ]]; then
+        completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
+        completionsSha=$(download_source_sha256 "$completionsUrl") || true
+        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
+        if [[ -z "$completionsSha" ]]; then
+          add_failure "$pkg" "failed to determine completionsSha256"
+          rm -f "$tmp"
+          return 1
+        fi
+      fi
+
+      if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
+        add_failure "$pkg" "failed to determine vscodeVersion"
+        rm -f "$tmp"
+        return 1
+      fi
+
+      rm -f "$tmp"
+
+      if ! validate_release_values "$pkg"; then
+        return 1
+      fi
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        return 1
+      fi
+
+      record_update "$current_version" "$version"
+    }
+
+    update_go_package() {
+      local pkg="$1"
+      releaseFile="releases/$pkg.nix"
+      version=""
+      repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
+      repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
+
+      echo "check go package $pkg ($repoOwner/$repoName)" >&2
+
+      current_tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0]' || true)
+      tag=$(jq -r '.name // ""' <<<"$current_tag")
+      version="''${tag#v}"
+
+      if [[ -z "$version" ]]; then
+        add_failure "$pkg" "failed to determine version via gh api"
+        return 1
+      fi
+
+      current_version=$(release_field_value "$releaseFile" "version")
+
+      if [[ "$current_version" == "$version" ]]; then
+        if ! validate_release_file "$pkg" "$releaseFile"; then
+          return 1
+        fi
+
+        echo "$pkg already on $version" >&2
+        return 0
+      fi
+
+      echo "$pkg: $current_version -> $version" >&2
+
+      if [[ "$pkg" == "pvetui" ]]; then
+        rev=$(jq -r '.commit.sha // ""' <<<"$current_tag")
+        if [[ -z "$rev" ]]; then
+          add_failure "$pkg" "failed to determine rev via gh api"
+          return 1
+        fi
+      fi
+
+      sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
+      sourceSha=""
+      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+      if [[ -z "$sourceSha" ]]; then
+        add_failure "$pkg" "failed to compute sourceSha256"
+        return 1
+      fi
+      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+
+      vendorHash=""
+      vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      vendorHash=$(release_field_value "$releaseFile" "vendorHash")
+      if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
+        vendorHash="$vendorHashPlaceholder"
+      fi
+
+      if ! validate_release_values "$pkg"; then
+        return 1
+      fi
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        return 1
+      fi
+
+      if ! refresh_vendor_hash "$pkg" "$releaseFile"; then
+        return 1
+      fi
+
+      record_update "$current_version" "$version"
+    }
+
+    refresh_vendor_hash() {
+      local pkg="$1"
+      local release_file="$2"
+      echo "get vendorHash for $pkg, need build" >&2
+      if buildOutput=$(nix build --no-link ".#$pkg" 2>&1); then
+        echo "vendorHash unchanged" >&2
+      else
+        correctHash=""
+        if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
+          correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
+        fi
+
+        if [[ -n "$correctHash" ]]; then
+          vendorHash="$correctHash"
+          echo "found vendorHash: $vendorHash" >&2
+          if ! write_release_file "$pkg" "$release_file"; then
+            add_failure "$pkg" "failed to write $release_file"
+            return 1
+          fi
+        else
+          echo "could not figure out vendorHash, set it by hand or run nix build .#$pkg" >&2
+        fi
+      fi
+    }
+
+    update_branch_package() {
+      local pkg="$1"
+      releaseFile="releases/$pkg.nix"
+      repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].owner' <<<"$branchSources")
+      repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repo' <<<"$branchSources")
+      branch=$(jq -r --arg pkg "$pkg" '.[$pkg].branch' <<<"$branchSources")
+
+      echo "check branch package $pkg ($repoOwner/$repoName@$branch)" >&2
+
+      rev=$(gh api "repos/$repoOwner/$repoName/commits/$branch" --jq '.sha' || true)
+
+      if [[ -z "$rev" ]]; then
+        add_failure "$pkg" "failed to determine rev via gh api"
+        return 1
+      fi
+
+      current_rev=$(release_field_value "$releaseFile" "rev")
+
+      if [[ "$current_rev" == "$rev" ]]; then
+        if ! validate_release_file "$pkg" "$releaseFile"; then
+          return 1
+        fi
+
+        echo "$pkg already on $rev" >&2
+        return 0
+      fi
+
+      echo "$pkg: $(display_version "$current_rev") -> $(short_rev "$rev")" >&2
+
+      sourceUrl="https://github.com/$repoOwner/$repoName/archive/$rev.tar.gz"
+      sourceSha=""
+      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+      if [[ -z "$sourceSha" ]]; then
+        add_failure "$pkg" "failed to compute sourceSha256"
+        return 1
+      fi
+      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+
+      if ! validate_release_values "$pkg"; then
+        return 1
+      fi
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        return 1
+      fi
+
+      record_update "$current_rev" "$rev"
+    }
+
     meta='${metaJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
 
     for pkg in $package_names; do
-      prepare_job "$pkg"
-
-      (
-        job_failed=false
-
-        for job_pkg in $pkg; do
-          pkg="$job_pkg"
-          baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
-          urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
-          releaseFile="releases/$pkg.nix"
-          completionsSha=""
-          sha=""
-          sourceSha=""
-          url=""
-          version=""
-          vscodeVersion=""
-
-          echo "check $pkg from $baseUrl" >&2
-
-          if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
-            metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
-            url=$(jq -r '.url // ""' <<<"$metadata")
-            version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
-            vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
-          elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
-            metadata=$(curl_retry -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
-            url=$(jq -r '.url // ""' <<<"$metadata")
-            version=$(jq -r '.version // ""' <<<"$metadata")
-          elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
-            version=$(curl_retry -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
-          elif [[ "$baseUrl" == *"github.com"* ]]; then
-            repoBase="''${baseUrl%/releases/download}"
-            redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
-            tag=$(basename "$redirect" 2>/dev/null || true)
-            case "$pkg" in
-              bun)
-                version="''${tag#bun-v}"
-                ;;
-              *)
-                version="''${tag#v}"
-                ;;
-            esac
-          elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
-            manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
-            version=$(jq -r '.version // ""' <<<"$manifest")
-          elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
-            metadata=$(curl_retry -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
-            version=$(jq -r '.currentRelease // ""' <<<"$metadata")
-          elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
-            pkgName=$(basename "$baseUrl")
-            metadata=$(curl_retry -fsSL "https://registry.npmjs.org/$pkgName/latest" 2>/dev/null || true)
-            version=$(jq -r '.version // ""' <<<"$metadata")
-          elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
-            redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
-            version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
-          else
-            add_failure "$pkg" "automatic version discovery not supported"
-            continue
-          fi
-
-          if [[ -z "$version" ]]; then
-            add_failure "$pkg" "failed to determine version"
-            continue
-          fi
-
-          current_version=$(release_field_value "$releaseFile" "version")
-
-          if [[ "$current_version" == "$version" ]]; then
-            if ! validate_release_file "$pkg" "$releaseFile"; then
-              continue
-            fi
-
-            echo "$pkg already on $version" >&2
-            continue
-          fi
-
-          echo "$pkg: $current_version -> $version" >&2
-
-          if [[ -z "$url" ]]; then
-            url="''${urlTemplate//\{version\}/$version}"
-          fi
-
-          if [[ -z "$url" ]]; then
-            add_failure "$pkg" "failed to determine download URL"
-            continue
-          fi
-
-          tmp=$(mktemp)
-
-          if ! curl_retry -L -s -o "$tmp" "$url"; then
-            add_failure "$pkg" "failed to download binary version $version"
-            rm -f "$tmp"
-            continue
-          fi
-
-          sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
-          if [[ -z "$sha" ]]; then
-            add_failure "$pkg" "failed to compute sha256 for $url"
-            rm -f "$tmp"
-            continue
-          fi
-
-          if [[ "$pkg" == "kiro" ]]; then
-            vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
-          fi
-
-          if [[ "$pkg" == "mise" ]]; then
-            sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
-            if [[ -z "$sourceSha" ]]; then
-              add_failure "$pkg" "failed to determine sourceSha256"
-              rm -f "$tmp"
-              continue
-            fi
-          fi
-
-          if [[ "$pkg" == "tinymist" ]]; then
-            completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
-            completionsSha=$(download_source_sha256 "$completionsUrl") || true
-            completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
-            if [[ -z "$completionsSha" ]]; then
-              add_failure "$pkg" "failed to determine completionsSha256"
-              rm -f "$tmp"
-              continue
-            fi
-          fi
-
-          if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
-            add_failure "$pkg" "failed to determine vscodeVersion"
-            rm -f "$tmp"
-            continue
-          fi
-
-          rm -f "$tmp"
-
-          if ! validate_release_values "$pkg"; then
-            continue
-          fi
-
-          if ! write_release_file "$pkg" "$releaseFile"; then
-            add_failure "$pkg" "failed to write $releaseFile"
-            continue
-          fi
-
-          printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
-          echo "wrote $releaseFile" >&2
-        done
-
-        if [[ "$job_failed" == "true" ]]; then
-          exit 1
-        fi
-        printf '%s\n' success > "$status_file"
-      ) &
-      job_pids+=("$!")
-      running_pids+=("$!")
-      throttle_jobs
+      spawn_job update_package "$pkg"
     done
 
     goPackages='${goPackagesJson}'
     for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
-      prepare_job "$pkg"
+      spawn_job update_go_package "$pkg"
+    done
 
-      (
-        job_failed=false
-
-        for job_pkg in $pkg; do
-          pkg="$job_pkg"
-          releaseFile="releases/$pkg.nix"
-          sourceSha=""
-          vendorHash=""
-          version=""
-          repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].repoOwner' <<<"$goPackages")
-          repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repoName' <<<"$goPackages")
-
-          echo "check go package $pkg ($repoOwner/$repoName)" >&2
-
-          tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0].name' || true)
-          version="''${tag#v}"
-
-          if [[ -z "$version" ]]; then
-            add_failure "$pkg" "failed to determine version via gh api"
-            continue
-          fi
-
-          current_version=$(release_field_value "$releaseFile" "version")
-
-          if [[ "$current_version" == "$version" ]]; then
-            if ! validate_release_file "$pkg" "$releaseFile"; then
-              continue
-            fi
-
-            echo "$pkg already on $version" >&2
-            continue
-          fi
-
-          echo "$pkg: $current_version -> $version" >&2
-
-          sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
-          sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
-          if [[ -z "$sourceSha" ]]; then
-            add_failure "$pkg" "failed to compute sourceSha256"
-            continue
-          fi
-          sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
-
-          vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-          vendorHash=$(release_field_value "$releaseFile" "vendorHash")
-          if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
-            vendorHash="$vendorHashPlaceholder"
-          fi
-
-          if ! validate_release_values "$pkg"; then
-            continue
-          fi
-
-          if ! write_release_file "$pkg" "$releaseFile"; then
-            add_failure "$pkg" "failed to write $releaseFile"
-            continue
-          fi
-
-          echo "get vendorHash for $pkg, need build" >&2
-          if buildOutput=$(nix build --no-link ".#$pkg" 2>&1); then
-            echo "vendorHash unchanged" >&2
-          else
-            correctHash=""
-            if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
-              correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
-            fi
-
-            if [[ -n "$correctHash" ]]; then
-              vendorHash="$correctHash"
-              echo "found vendorHash: $vendorHash" >&2
-              if ! write_release_file "$pkg" "$releaseFile"; then
-                add_failure "$pkg" "failed to write $releaseFile"
-                continue
-              fi
-            else
-              echo "could not figure out vendorHash, set it by hand or run nix build .#$pkg" >&2
-            fi
-          fi
-
-          printf '%s\n%s\n' "$current_version" "$version" > "$result_file"
-          echo "wrote $releaseFile" >&2
-        done
-
-        if [[ "$job_failed" == "true" ]]; then
-          exit 1
-        fi
-        printf '%s\n' success > "$status_file"
-      ) &
-      job_pids+=("$!")
-      running_pids+=("$!")
-      throttle_jobs
+    branchSources='${branchSourcesJson}'
+    for pkg in $(jq -r 'keys[]' <<<"$branchSources"); do
+      spawn_job update_branch_package "$pkg"
     done
 
     for pid in "''${running_pids[@]}"; do
@@ -631,10 +717,14 @@ pkgs.writeShellApplication {
     fi
 
     echo "update flake.lock to latest inputs" >&2
-    nix --extra-experimental-features "nix-command flakes" flake update || true
+    if ! nix --extra-experimental-features "nix-command flakes" flake update; then
+      echo "Warning: flake update failed, continuing with existing flake.lock" >&2
+    fi
 
     echo "format" >&2
-    nix --extra-experimental-features "nix-command flakes" fmt || true
+    if ! nix --extra-experimental-features "nix-command flakes" fmt; then
+      echo "Warning: fmt failed, continuing with unformatted files" >&2
+    fi
 
     if [[ "''${#updates[@]}" -eq 0 ]]; then
       echo "nothing new" >&2

@@ -11,6 +11,21 @@ nix run .#update-release        # Update all packages
 nix flake check                 # Validate formatting
 ```
 
+## Binary Cache
+
+Prebuilt packages are available from Cachix:
+
+```nix
+{
+  nix.settings = {
+    extra-substituters = [ "https://visoredkon.cachix.org" ];
+    extra-trusted-public-keys = [
+      "visoredkon.cachix.org-1:1Lxuvyp4PXtSm9TXxKrXjxmtdcxyoT6CaasoRAmHYRg="
+    ];
+  };
+}
+```
+
 ## Using via Overlay (NixOS)
 
 Add to your `flake.nix`:
@@ -19,7 +34,7 @@ Add to your `flake.nix`:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    my-flakes.url = "github:pahril/my-flakes";
+    my-flakes.url = "github:visoredkon/my-flakes";
   };
 
   outputs = { self, nixpkgs, my-flakes, ... }:

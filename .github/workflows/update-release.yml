@@ -43,6 +43,34 @@ jobs:
       - name: update my-flakes
         run: nix run .#update-release -- --push
 
+  build-my-flakes:
+    needs: update-my-flakes
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      USER: runner
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: install-nix
+        uses: cachix/install-nix-action@v31
+
+      - name: setup cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: visoredkon
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          pushFilter: "(-source$|\\.drv$|go-modules)"
+
       - name: get packages
         id: get-pkgs
         run: |
@@ -51,21 +79,18 @@ jobs:
             --accept-flake-config)
           echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
 
-      - name: build all packages
+      - name: build shard packages
         run: |
+          i=0
           for pkg in ${{ steps.get-pkgs.outputs.pkgs }}; do
-            nix build ".#packages.x86_64-linux.$pkg" --print-build-logs
-            path=$(nix path-info ".#packages.x86_64-linux.$pkg" \
-              --accept-flake-config)
-            cachix push visoredkon "$path"
-          done
-
-      - name: pin latest
-        run: |
-          for pkg in ${{ steps.get-pkgs.outputs.pkgs }}; do
-            path=$(nix path-info ".#packages.x86_64-linux.$pkg" \
-              --accept-flake-config)
-            cachix pin visoredkon latest-$pkg "$path" --keep-forever
+            if (( i % 4 == ${{ matrix.shard }} )); then
+              nix build ".#packages.x86_64-linux.$pkg" --print-build-logs
+              path=$(nix path-info ".#packages.x86_64-linux.$pkg^out" \
+                --accept-flake-config)
+              cachix push visoredkon "$path"
+              cachix pin visoredkon latest-$pkg "$path" --keep-revisions 1
+            fi
+            (( ++i ))
           done
 
   update-hytale-launcher:

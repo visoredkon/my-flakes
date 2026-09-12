@@ -27,7 +27,7 @@ pkgs.stdenvNoCC.mkDerivation {
 
   unpackPhase = ''
     runHook preUnpack
-    bsdtar -xf $src
+    bsdtar -xf "$src"
     runHook postUnpack
   '';
 

@@ -35,9 +35,9 @@
 
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
       mkProtonCachyos = pkgs.callPackage ./packages/mk-proton-cachyos.nix { };
+      optimization = pkgs.callPackage ./packages/optimization.nix { };
 
       disabledPackages = [
-        "claude-code"
         "kiro"
         "kiro-cli"
         "warp-terminal"
@@ -123,6 +123,16 @@
           repoName = "bootdev";
         };
 
+        "elephant" = {
+          repoOwner = "abenz1267";
+          repoName = "elephant";
+        };
+
+        "pvetui" = {
+          repoOwner = "devnullvoid";
+          repoName = "pvetui";
+        };
+
         "typescript" = {
           repoOwner = "microsoft";
           repoName = "TypeScript";
@@ -143,9 +153,73 @@
           inherit name;
           value = pkgs.callPackage ./packages/${name}.nix {
             release = goPackageReleases.${name};
+            inherit optimization;
           };
         }) goPackageNames
       );
+
+      optimizedPlainNames = [
+        "bat"
+        "btop"
+        "delta"
+        "easyeffects"
+        "fastfetch"
+        "fd"
+        "fish"
+        "grim"
+        "kitty"
+        "neovim-unwrapped"
+        "slurp"
+        "starship"
+        "swappy"
+        "wl-clipboard"
+      ];
+
+      optimizedReleaseNames = [
+        "libfprint"
+        "waybar"
+      ];
+
+      optimizedReleases = builtins.listToAttrs (
+        map (name: {
+          inherit name;
+          value = import ./releases/${name}.nix;
+        }) optimizedReleaseNames
+      );
+
+      optimizedPackages =
+        builtins.listToAttrs (
+          map (name: {
+            inherit name;
+            value = pkgs.callPackage ./packages/${name}.nix { inherit optimization; };
+          }) optimizedPlainNames
+        )
+        // builtins.mapAttrs (
+          name: release:
+          pkgs.callPackage ./packages/${name}.nix {
+            inherit optimization release;
+          }
+        ) optimizedReleases
+        // {
+          fprintd = pkgs.callPackage ./packages/fprintd.nix {
+            inherit optimization;
+            inherit (optimizedPackages) libfprint;
+          };
+        };
+
+      branchSourcesConfig = {
+        "libfprint" = {
+          owner = "visoredkon";
+          repo = "libfprint-egis0576";
+          branch = "master";
+        };
+
+        "waybar" = {
+          owner = "Alexays";
+          repo = "Waybar";
+          branch = "master";
+        };
+      };
 
       packageMetadata = builtins.mapAttrs (
         name: info:
@@ -176,7 +250,9 @@
       updateRelease = pkgs.callPackage ./apps/update-release.nix {
         inherit packageMetadata;
         inherit goPackagesConfig;
+        inherit branchSourcesConfig;
       };
+
     in
     {
       apps.${system} =
@@ -203,13 +279,19 @@
               touch $out
             ''
         ) packageMetadata)
+        // (builtins.mapAttrs (
+          name: _:
+          pkgs.runCommand "check-${name}" {
+            buildInputs = [ goPackages.${name} ];
+          } "touch $out"
+        ) goPackages)
+        // (builtins.mapAttrs (
+          name: _:
+          pkgs.runCommand "check-${name}" {
+            buildInputs = [ optimizedPackages.${name} ];
+          } "touch $out"
+        ) optimizedPackages)
         // {
-          "bootdev" = pkgs.runCommand "check-bootdev" {
-            buildInputs = [ generatedPackages.bootdev ];
-          } "touch $out";
-          "typescript" = pkgs.runCommand "check-typescript" {
-            buildInputs = [ generatedPackages.typescript ];
-          } "touch $out";
           format =
             pkgs.runCommand "check-format"
               {
@@ -232,19 +314,97 @@
                 statix check .
                 touch $out
               '';
+          shellcheck =
+            pkgs.runCommand "check-shellcheck"
+              {
+                nativeBuildInputs = [
+                  pkgs.basedpyright
+                  pkgs.python3
+                  pkgs.ruff
+                  pkgs.shellcheck
+                ];
+                src = self;
+              }
+              ''
+                work=$(mktemp -d)
+                cp -r $src/. "$work/"
+                chmod -R u+w "$work"
+                cd "$work"
+                export HOME=$(mktemp -d)
+                export RUFF_CACHE_DIR=$(mktemp -d)
+                cat > script.py <<'PYEOF'
+                import pathlib
+                import re
+                import subprocess
+                import sys
+
+                names: str = (
+                    "installPhase|postInstall|buildPhase|unpackPhase|postFixup|"
+                    "preInstall|installCheck|checkPhase|postPatch|preBuild|postBuild|"
+                    "extraInstallCommands|extraBuildCommands|runScript"
+                )
+                quote: str = "'" + "'"
+                pattern: re.Pattern[str] = re.compile(
+                    "(" + names + ")\\s*=\\s*" + quote + "{2}(.*?)" + quote + "{2};",
+                    re.DOTALL,
+                )
+                failures: list[str] = []
+                nix_files: list[pathlib.Path] = sorted(pathlib.Path(".").rglob("*.nix"))
+                for path in nix_files:
+                    text: str = path.read_text()
+                    matches: list[re.Match[str]] = list(pattern.finditer(text))
+                    for match in matches:
+                        script: str = "#!/usr/bin/env bash\n" + match.group(2) + "\n"
+                        result: subprocess.CompletedProcess[str] = subprocess.run(
+                            [
+                                "shellcheck",
+                                "-S",
+                                "warning",
+                                "-e",
+                                "SC2154,SC1083,SC1009,SC1073,SC1036,SC1072,SC1065",
+                                "-",
+                            ],
+                            input=script,
+                            capture_output=True,
+                            check=False,
+                            text=True,
+                        )
+                        if result.returncode != 0:
+                            failures.append(f"{path}:{match.group(1)}\n{result.stdout}")
+                if failures:
+                    print("\n".join(failures))
+                    sys.exit(1)
+                PYEOF
+                ruff check script.py
+                ruff format --check script.py
+                basedpyright script.py
+                python3 script.py
+                touch $out
+              '';
+          yamllint =
+            pkgs.runCommand "check-yamllint"
+              {
+                nativeBuildInputs = [ pkgs.yamllint ];
+                src = self;
+              }
+              ''
+                cd $src
+                yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' .
+                touch $out
+              '';
         };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
 
       overlays.default =
         _: prev:
-        builtins.intersectAttrs activePackagesConfig (
+        builtins.intersectAttrs (activePackagesConfig // optimizedPackages) (
           self.packages.${prev.stdenv.hostPlatform.system} or { }
         )
         // nixpkgs.lib.genAttrs goPackageNames (
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
         );
 
-      packages.${system} = generatedPackages;
+      packages.${system} = generatedPackages // optimizedPackages;
     };
 }

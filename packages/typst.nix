@@ -26,7 +26,7 @@ mkPrebuilt {
 
   postFixup = ''
     for shell in bash fish zsh; do
-      installShellCompletion --cmd typst --"$shell" <($out/bin/typst completions "$shell")
+      installShellCompletion --cmd typst --"$shell" <("$out/bin/typst" completions "$shell")
     done
   '';
 

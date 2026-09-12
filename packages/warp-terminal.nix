@@ -44,12 +44,12 @@ mkPrebuilt {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out
-    cp -r opt usr/* $out
+    mkdir -p "$out"
+    cp -r opt usr/* "$out"
 
-    substituteInPlace $out/bin/warp-terminal \
+    substituteInPlace "$out/bin/warp-terminal" \
       --replace-fail '#!/bin/bash' '#!${pkgs.bash}/bin/bash' \
-      --replace-fail /opt/ $out/opt/
+      --replace-fail /opt/ "$out/opt/"
 
     runHook postInstall
   '';
@@ -57,6 +57,6 @@ mkPrebuilt {
   postFixup = ''
     patchelf \
       --add-needed libfontconfig.so.1 \
-      $out/opt/warpdotdev/warp-terminal/warp
+      "$out/opt/warpdotdev/warp-terminal/warp"
   '';
 }

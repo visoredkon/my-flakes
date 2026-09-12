@@ -25,7 +25,7 @@ mkPrebuilt {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/bin
+    mkdir -p "$out/bin"
     install -Dm755 kirocli/bin/kiro-cli "$out/bin/kiro-cli"
     install -Dm755 kirocli/bin/kiro-cli-chat "$out/bin/kiro-cli-chat"
     ln -s "$out/bin/kiro-cli" "$out/bin/q"
@@ -33,6 +33,6 @@ mkPrebuilt {
     runHook postInstall
   '';
   unpackPhase = ''
-    unzip $src
+    unzip "$src"
   '';
 }

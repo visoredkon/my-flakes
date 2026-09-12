@@ -1,14 +1,15 @@
 {
-  buildGo126Module,
   lib,
+  optimization,
   pkgs,
   release,
   ...
 }:
 
-(buildGo126Module.override { stdenv = pkgs.llvmPackages.stdenv; }) {
+optimization.withGoOptimizations {
+  goBuilder = pkgs.buildGo126Module;
   pname = "typescript";
-  inherit (release) version;
+  inherit (release) vendorHash version;
 
   src = pkgs.fetchFromGitHub {
     owner = "microsoft";
@@ -19,32 +20,17 @@
 
   modRoot = "tsc";
 
-  inherit (release) vendorHash;
-
   tags = [
     "noembed"
-  ];
-
-  ldflags = [
-    "-s"
-    "-w"
   ];
 
   subPackages = [
     "cmd/tsgo"
   ];
 
-  nativeBuildInputs = [
-    pkgs.mold
-    pkgs.writableTmpDirAsHomeHook
-  ];
+  nativeBuildInputs = [ pkgs.writableTmpDirAsHomeHook ];
 
-  env = {
-    CGO_ENABLED = 0;
-    GOAMD64 = "v3";
-    GOFLAGS = "-trimpath";
-    NIX_CFLAGS_LINK = "-fuse-ld=mold";
-  };
+  env.CGO_ENABLED = 0;
 
   postInstall = ''
     lib_dir="$out/lib/typescript"
