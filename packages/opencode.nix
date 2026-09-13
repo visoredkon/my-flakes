@@ -11,6 +11,7 @@ mkPrebuilt {
   inherit release urlTemplate;
 
   dontBuild = true;
+  sourceRoot = ".";
 
   nativeBuildInputs = with pkgs; [
     autoPatchelfHook
@@ -23,6 +24,4 @@ mkPrebuilt {
 
     runHook postInstall
   '';
-
-  sourceRoot = ".";
 }

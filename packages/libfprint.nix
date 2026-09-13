@@ -22,7 +22,6 @@ assert release ? sourceSha256 && release.sourceSha256 != "";
       };
 
       patches = [ ];
-      doCheck = false;
     }
     // optimization.withMesonClangMold old
   )

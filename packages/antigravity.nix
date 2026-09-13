@@ -37,14 +37,7 @@ let
     };
 
     dontBuild = true;
-
-    nativeBuildInputs = with pkgs; [
-      asar
-      autoPatchelfHook
-      copyDesktopItems
-    ];
-
-    desktopItems = [ antigravity-desktop ];
+    sourceRoot = "Antigravity-x64";
 
     buildInputs = with pkgs; [
       alsa-lib
@@ -65,25 +58,33 @@ let
       libpulseaudio
       libuuid
       libX11
-      libXScrnSaver
+      libxcb
       libXcomposite
       libXcursor
       libXdamage
       libXext
       libXfixes
       libXi
+      libxkbcommon
       libXrandr
       libXrender
-      libXtst
-      libxcb
-      libxkbcommon
+      libXScrnSaver
       libxshmfence
+      libXtst
       mesa
       nspr
       nss
       pango
       systemd
     ];
+
+    nativeBuildInputs = with pkgs; [
+      asar
+      autoPatchelfHook
+      copyDesktopItems
+    ];
+
+    desktopItems = [ antigravity-desktop ];
 
     installPhase = ''
       runHook preInstall
@@ -106,8 +107,6 @@ let
 
       runHook postInstall
     '';
-
-    sourceRoot = "Antigravity-x64";
   };
 in
 pkgs.buildFHSEnv {
@@ -138,19 +137,19 @@ pkgs.buildFHSEnv {
       libpulseaudio
       libuuid
       libX11
-      libXScrnSaver
+      libxcb
       libXcomposite
       libXcursor
       libXdamage
       libXext
       libXfixes
       libXi
+      libxkbcommon
       libXrandr
       libXrender
-      libXtst
-      libxcb
-      libxkbcommon
+      libXScrnSaver
       libxshmfence
+      libXtst
       mesa
       nspr
       nss

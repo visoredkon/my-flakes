@@ -3,4 +3,5 @@
   pkgs,
 }:
 
-pkgs.starship.overrideAttrs (optimization.withRustOptimizations { lto = "fat"; })
+(pkgs.starship.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs
+  optimization.withRustOptimizations

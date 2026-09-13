@@ -97,7 +97,7 @@ pkgs.writeShellApplication {
 
       tmp=$(mktemp)
 
-      if ! curl_retry -L -s -o "$tmp" "$url"; then
+      if ! curl_retry -L -sS -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo ""
         return 1
@@ -124,7 +124,7 @@ pkgs.writeShellApplication {
           print groups[1]
           exit
         }
-      ' "$release_file" 2>/dev/null || true
+      ' "$release_file" || true
     }
 
     release_fields_for_package() {
@@ -135,11 +135,11 @@ pkgs.writeShellApplication {
       antigravity-cli)
         echo "sha256 url version"
         ;;
-      bootdev | elephant | typescript)
+      bootdev | typescript)
         echo "sourceSha256 vendorHash version"
         ;;
-      pvetui)
-        echo "rev sourceSha256 vendorHash version"
+      elephant)
+        echo "rev sourceSha256 vendorHash"
         ;;
       kiro)
         echo "sha256 version vscodeVersion"
@@ -149,6 +149,9 @@ pkgs.writeShellApplication {
         ;;
       mise)
         echo "sha256 sourceSha256 version"
+        ;;
+      pvetui)
+        echo "rev sourceSha256 vendorHash version"
         ;;
       tinymist)
         echo "completionsSha256 sha256 version"
@@ -193,7 +196,7 @@ pkgs.writeShellApplication {
 
     parse_update() {
       IFS=':' read -r pkg from_version to_version <<<"$1"
-      if [[ "''${pkg:-}" == "libfprint" || "''${pkg:-}" == "waybar" ]]; then
+      if [[ "''${pkg:-}" == "elephant" || "''${pkg:-}" == "libfprint" || "''${pkg:-}" == "waybar" ]]; then
         from_version=$(short_rev "$from_version")
         to_version=$(short_rev "$to_version")
       fi
@@ -315,7 +318,7 @@ pkgs.writeShellApplication {
 
     trap cleanup_jobs EXIT
 
-    max_jobs=$(nproc 2>/dev/null || echo 6)
+    max_jobs=$(nproc || echo 6)
     if [[ "$max_jobs" -gt 6 ]]; then
       max_jobs=6
     fi
@@ -385,20 +388,20 @@ pkgs.writeShellApplication {
       echo "check $pkg from $baseUrl" >&2
 
       if [[ "$baseUrl" == *"antigravity-auto-updater"* ]]; then
-        metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+        metadata=$(curl_retry -fsSL "$baseUrl/api/update/linux-x64/stable/latest" || true)
         url=$(jq -r '.url // ""' <<<"$metadata")
         version=$(gawk 'match($0, /\/([^/]+)\/linux-x64\//, m) { print m[1] }' <<<"$url")
         vscodeVersion=$(jq -r '.productVersion // ""' <<<"$metadata")
       elif [[ "$baseUrl" == *"antigravity-cli-auto-updater"* ]]; then
-        metadata=$(curl_retry -fsSL "$baseUrl/manifests/linux_amd64.json" 2>/dev/null || true)
+        metadata=$(curl_retry -fsSL "$baseUrl/manifests/linux_amd64.json" || true)
         url=$(jq -r '.url // ""' <<<"$metadata")
         version=$(jq -r '.version // ""' <<<"$metadata")
       elif [[ "$baseUrl" == *"downloads.claude.ai"* ]]; then
-        version=$(curl_retry -fsSL "$baseUrl/latest" 2>/dev/null | tr -d '\r\n' || true)
+        version=$(curl_retry -fsSL "$baseUrl/latest" | tr -d '\r\n' || true)
       elif [[ "$baseUrl" == *"github.com"* ]]; then
         repoBase="''${baseUrl%/releases/download}"
-        redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" 2>/dev/null || true)
-        tag=$(basename "$redirect" 2>/dev/null || true)
+        redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" || true)
+        tag=$(basename "$redirect" || true)
         case "$pkg" in
           bun)
             version="''${tag#bun-v}"
@@ -408,13 +411,13 @@ pkgs.writeShellApplication {
             ;;
         esac
       elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
-        manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" 2>/dev/null || true)
+        manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" || true)
         version=$(jq -r '.version // ""' <<<"$manifest")
       elif [[ "$baseUrl" == *"prod.download.desktop.kiro.dev"* ]]; then
-        metadata=$(curl_retry -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" 2>/dev/null || true)
+        metadata=$(curl_retry -fsSL "$baseUrl/stable/metadata-linux-x64-stable.json" || true)
         version=$(jq -r '.currentRelease // ""' <<<"$metadata")
       elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
-        redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' 2>/dev/null || true)
+        redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' || true)
         version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
       else
         add_failure "$pkg" "automatic version discovery not supported"
@@ -450,7 +453,7 @@ pkgs.writeShellApplication {
 
       tmp=$(mktemp)
 
-      if ! curl_retry -L -s -o "$tmp" "$url"; then
+      if ! curl_retry -L -sS -o "$tmp" "$url"; then
         add_failure "$pkg" "failed to download binary version $version"
         rm -f "$tmp"
         return 1
@@ -466,7 +469,7 @@ pkgs.writeShellApplication {
 
       vscodeVersion=""
       if [[ "$pkg" == "kiro" ]]; then
-        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" 2>/dev/null | jq -r '.vsCodeVersion // ""' 2>/dev/null || true)
+        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" | jq -r '.vsCodeVersion // ""' || true)
       fi
 
       if [[ "$pkg" == "mise" ]]; then
@@ -482,7 +485,7 @@ pkgs.writeShellApplication {
       if [[ "$pkg" == "tinymist" ]]; then
         completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
         completionsSha=$(download_source_sha256 "$completionsUrl") || true
-        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" 2>/dev/null || true)
+        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" || true)
         if [[ -z "$completionsSha" ]]; then
           add_failure "$pkg" "failed to determine completionsSha256"
           rm -f "$tmp"
@@ -551,12 +554,12 @@ pkgs.writeShellApplication {
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
       sourceSha=""
-      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" || true)
       if [[ -z "$sourceSha" ]]; then
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
       fi
-      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" || true)
 
       vendorHash=""
       vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -637,12 +640,22 @@ pkgs.writeShellApplication {
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/$rev.tar.gz"
       sourceSha=""
-      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" 2>/dev/null || true)
+      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" || true)
       if [[ -z "$sourceSha" ]]; then
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
       fi
-      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" 2>/dev/null || true)
+      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" || true)
+
+      case "$pkg" in
+      elephant)
+        vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        vendorHash=$(release_field_value "$releaseFile" "vendorHash")
+        if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
+          vendorHash="$vendorHashPlaceholder"
+        fi
+        ;;
+      esac
 
       if ! validate_release_values "$pkg"; then
         return 1
@@ -652,6 +665,14 @@ pkgs.writeShellApplication {
         add_failure "$pkg" "failed to write $releaseFile"
         return 1
       fi
+
+      case "$pkg" in
+      elephant)
+        if ! refresh_vendor_hash "$pkg" "$releaseFile"; then
+          return 1
+        fi
+        ;;
+      esac
 
       record_update "$current_rev" "$rev"
     }
@@ -716,23 +737,34 @@ pkgs.writeShellApplication {
       exit 1
     fi
 
+    echo "" >&2
     echo "update flake.lock to latest inputs" >&2
-    if ! nix --extra-experimental-features "nix-command flakes" flake update; then
+    if ! nix flake update; then
       echo "Warning: flake update failed, continuing with existing flake.lock" >&2
     fi
 
+    echo "" >&2
     echo "format" >&2
-    if ! nix --extra-experimental-features "nix-command flakes" fmt; then
+    if ! nix fmt; then
       echo "Warning: fmt failed, continuing with unformatted files" >&2
     fi
+
+    echo "" >&2
+    echo "lint checks" >&2
+    nix build --no-link \
+      ".#checks.x86_64-linux.embedded-lint" \
+      ".#checks.x86_64-linux.format" \
+      ".#checks.x86_64-linux.linter" \
+      ".#checks.x86_64-linux.yamllint"
 
     if [[ "''${#updates[@]}" -eq 0 ]]; then
       echo "nothing new" >&2
     fi
 
+    echo "" >&2
     if [[ "$COMMIT" == "true" ]]; then
-      echo "stage releases and flake.lock for commit" >&2
-      git add releases/ flake.lock
+      echo "stage releases, formatted files, and flake.lock for commit" >&2
+      git add flake.lock flake.nix apps/ packages/ releases/
 
       if git diff --cached --quiet; then
         echo "nothing to commit" >&2
@@ -774,6 +806,7 @@ pkgs.writeShellApplication {
       fi
     fi
 
+    echo "" >&2
     echo "done" >&2
   '';
 }

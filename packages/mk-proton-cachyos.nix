@@ -20,6 +20,11 @@ pkgs.stdenvNoCC.mkDerivation {
     url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
   };
 
+  outputs = [
+    "out"
+    "steamcompattool"
+  ];
+
   nativeBuildInputs = [
     pkgs.libarchive
     pkgs.xz
@@ -30,11 +35,6 @@ pkgs.stdenvNoCC.mkDerivation {
     bsdtar -xf "$src"
     runHook postUnpack
   '';
-
-  outputs = [
-    "out"
-    "steamcompattool"
-  ];
 
   installPhase = ''
     runHook preInstall

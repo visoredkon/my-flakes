@@ -13,32 +13,32 @@ mkPrebuilt {
   dontBuild = true;
   sourceRoot = ".";
 
+  buildInputs = with pkgs; [
+    alsa-lib
+    curl
+    fontconfig
+    stdenv.cc.cc
+    xz
+    zlib
+  ];
+
   nativeBuildInputs = with pkgs; [
     autoPatchelfHook
     makeWrapper
     zstd
   ];
 
-  buildInputs = with pkgs; [
-    alsa-lib
-    curl
-    fontconfig
-    stdenv.cc.cc
-    zlib
-    xz
-  ];
-
   runtimeDependencies = with pkgs; [
     libglvnd
-    libxkbcommon
-    stdenv.cc.libc
-    vulkan-loader
-    xdg-utils
-    wayland
     libx11
     libxcb
     libxcursor
     libxi
+    libxkbcommon
+    stdenv.cc.libc
+    vulkan-loader
+    wayland
+    xdg-utils
   ];
 
   installPhase = ''

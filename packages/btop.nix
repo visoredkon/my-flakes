@@ -3,4 +3,4 @@
   pkgs,
 }:
 
-pkgs.btop.overrideAttrs optimization.moldEnv
+pkgs.btop.overrideAttrs optimization.withCMakeClangMold

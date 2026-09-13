@@ -16,7 +16,7 @@ assert release ? sourceSha256 && release.sourceSha256 != "";
   (
     old:
     let
-      base = optimization.withMesonClangMold old;
+      base = optimization.withMesonClangMoldMode "thin" old;
     in
     base
     // {
@@ -27,7 +27,6 @@ assert release ? sourceSha256 && release.sourceSha256 != "";
         hash = release.sourceSha256;
       };
 
-      doCheck = false;
       mesonFlags = base.mesonFlags ++ [
         "-Dtests=disabled"
         "-Dwwan=disabled"

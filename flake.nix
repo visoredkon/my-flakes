@@ -13,7 +13,7 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.zst";
   };
 
   outputs =
@@ -123,11 +123,6 @@
           repoName = "bootdev";
         };
 
-        "elephant" = {
-          repoOwner = "abenz1267";
-          repoName = "elephant";
-        };
-
         "pvetui" = {
           repoOwner = "devnullvoid";
           repoName = "pvetui";
@@ -172,10 +167,12 @@
         "slurp"
         "starship"
         "swappy"
+        "walker"
         "wl-clipboard"
       ];
 
       optimizedReleaseNames = [
+        "elephant"
         "libfprint"
         "waybar"
       ];
@@ -186,6 +183,13 @@
           value = import ./releases/${name}.nix;
         }) optimizedReleaseNames
       );
+
+      obsPluginNames = [
+        "obs-pipewire-audio-capture"
+        "obs-vkcapture"
+      ];
+
+      obsPackages = pkgs.callPackage ./packages/obs-studio.nix { inherit optimization; };
 
       optimizedPackages =
         builtins.listToAttrs (
@@ -205,21 +209,12 @@
             inherit optimization;
             inherit (optimizedPackages) libfprint;
           };
+          inherit (obsPackages)
+            obs-studio
+            obs-pipewire-audio-capture
+            obs-vkcapture
+            ;
         };
-
-      branchSourcesConfig = {
-        "libfprint" = {
-          owner = "visoredkon";
-          repo = "libfprint-egis0576";
-          branch = "master";
-        };
-
-        "waybar" = {
-          owner = "Alexays";
-          repo = "Waybar";
-          branch = "master";
-        };
-      };
 
       packageMetadata = builtins.mapAttrs (
         name: info:
@@ -245,6 +240,26 @@
       mkApp = program: {
         inherit program;
         type = "app";
+      };
+
+      branchSourcesConfig = {
+        "elephant" = {
+          owner = "abenz1267";
+          repo = "elephant";
+          branch = "dev";
+        };
+
+        "libfprint" = {
+          owner = "visoredkon";
+          repo = "libfprint-egis0576";
+          branch = "master";
+        };
+
+        "waybar" = {
+          owner = "Alexays";
+          repo = "Waybar";
+          branch = "master";
+        };
       };
 
       updateRelease = pkgs.callPackage ./apps/update-release.nix {
@@ -292,30 +307,8 @@
           } "touch $out"
         ) optimizedPackages)
         // {
-          format =
-            pkgs.runCommand "check-format"
-              {
-                nativeBuildInputs = [ pkgs.nixfmt ];
-                src = self;
-              }
-              ''
-                cd $src
-                nixfmt --check ${formatTargets}
-                touch $out
-              '';
-          linter =
-            pkgs.runCommand "check-linter"
-              {
-                nativeBuildInputs = [ pkgs.statix ];
-                src = self;
-              }
-              ''
-                cd $src
-                statix check .
-                touch $out
-              '';
-          shellcheck =
-            pkgs.runCommand "check-shellcheck"
+          embedded-lint =
+            pkgs.runCommand "check-embedded-lint"
               {
                 nativeBuildInputs = [
                   pkgs.basedpyright
@@ -337,25 +330,68 @@
                 import re
                 import subprocess
                 import sys
+                import textwrap
 
                 names: str = (
-                    "installPhase|postInstall|buildPhase|unpackPhase|postFixup|"
-                    "preInstall|installCheck|checkPhase|postPatch|preBuild|postBuild|"
-                    "extraInstallCommands|extraBuildCommands|runScript"
+                    "installPhase|buildPhase|unpackPhase|postFixup|postInstall|"
+                    "postPatchelf|extraInstallCommands|extraBuildCommands|text"
                 )
                 quote: str = "'" + "'"
+                escaped_dollar: str = quote + "$"
                 pattern: re.Pattern[str] = re.compile(
-                    "(" + names + ")\\s*=\\s*" + quote + "{2}(.*?)" + quote + "{2};",
+                    "(" + names + ")\\s*=\\s*" + quote + "(.*?)" + quote + ";",
                     re.DOTALL,
                 )
                 failures: list[str] = []
+                extracted: int = 0
+
+
+                def stub_nix_interpolations(body: str) -> str:
+                    stubbed: str = ""
+                    index: int = 0
+                    while index < len(body):
+                        start: int = body.find("''${", index)
+                        if start < 0 or body[max(0, start - 2) : start] == "'" + "'":
+                            stubbed += body[index:]
+                            break
+                        stubbed += body[index:start] + "NIX_INTERPOLATION"
+                        depth: int = 1
+                        cursor: int = start + 2
+                        while cursor < len(body) and depth > 0:
+                            if body[cursor] == "{":
+                                depth += 1
+                            elif body[cursor] == "}":
+                                depth -= 1
+                            cursor += 1
+                        index = cursor
+                    return stubbed
+
+
+                def run_check(command: list[str], label: str, script_text: str) -> None:
+                    result: subprocess.CompletedProcess[str] = subprocess.run(
+                        command,
+                        input=script_text,
+                        capture_output=True,
+                        check=False,
+                        text=True,
+                    )
+                    if result.returncode != 0:
+                        failures.append(f"{label}\n{result.stdout}{result.stderr}")
+
+
                 nix_files: list[pathlib.Path] = sorted(pathlib.Path(".").rglob("*.nix"))
                 for path in nix_files:
                     text: str = path.read_text()
                     matches: list[re.Match[str]] = list(pattern.finditer(text))
                     for match in matches:
-                        script: str = "#!/usr/bin/env bash\n" + match.group(2) + "\n"
-                        result: subprocess.CompletedProcess[str] = subprocess.run(
+                        raw: str = textwrap.dedent(match.group(2))
+                        body: str = stub_nix_interpolations(raw)
+                        body = body.replace(escaped_dollar, "$")
+                        script: str = "#!/usr/bin/env bash\n" + body
+                        extracted += 1
+                        label: str = f"{path}:{match.group(1)}"
+                        run_check(["bash", "-n"], label, script)
+                        run_check(
                             [
                                 "shellcheck",
                                 "-S",
@@ -364,13 +400,12 @@
                                 "SC2154,SC1083,SC1009,SC1073,SC1036,SC1072,SC1065",
                                 "-",
                             ],
-                            input=script,
-                            capture_output=True,
-                            check=False,
-                            text=True,
+                            label,
+                            script,
                         )
-                        if result.returncode != 0:
-                            failures.append(f"{path}:{match.group(1)}\n{result.stdout}")
+                if extracted == 0:
+                    print("no embedded scripts extracted from nix files")
+                    sys.exit(1)
                 if failures:
                     print("\n".join(failures))
                     sys.exit(1)
@@ -379,6 +414,28 @@
                 ruff format --check script.py
                 basedpyright script.py
                 python3 script.py
+                touch $out
+              '';
+          format =
+            pkgs.runCommand "check-format"
+              {
+                nativeBuildInputs = [ pkgs.nixfmt ];
+                src = self;
+              }
+              ''
+                cd $src
+                nixfmt --check ${formatTargets}
+                touch $out
+              '';
+          linter =
+            pkgs.runCommand "check-linter"
+              {
+                nativeBuildInputs = [ pkgs.statix ];
+                src = self;
+              }
+              ''
+                cd $src
+                statix check .
                 touch $out
               '';
           yamllint =
@@ -403,7 +460,14 @@
         )
         // nixpkgs.lib.genAttrs goPackageNames (
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
-        );
+        )
+        // {
+          obs-studio-plugins =
+            prev.obs-studio-plugins
+            // nixpkgs.lib.genAttrs obsPluginNames (
+              name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
+            );
+        };
 
       packages.${system} = generatedPackages // optimizedPackages;
     };

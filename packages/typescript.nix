@@ -7,7 +7,6 @@
 }:
 
 optimization.withGoOptimizations {
-  goBuilder = pkgs.buildGo126Module;
   pname = "typescript";
   inherit (release) vendorHash version;
 

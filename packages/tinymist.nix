@@ -19,6 +19,7 @@ mkPrebuilt {
   inherit release urlTemplate;
 
   dontBuild = true;
+  sourceRoot = "tinymist-x86_64-unknown-linux-gnu";
 
   buildInputs = with pkgs; [
     gcc-unwrapped.lib
@@ -50,6 +51,4 @@ mkPrebuilt {
       --fish completions/fish/vendor_completions.d/tinymist.fish \
       --zsh completions/zsh/_tinymist
   '';
-
-  sourceRoot = "tinymist-x86_64-unknown-linux-gnu";
 }

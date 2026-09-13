@@ -3,10 +3,4 @@
   pkgs,
 }:
 
-pkgs.easyeffects.overrideAttrs (
-  old:
-  (optimization.withMesonClangMold old)
-  // {
-    doCheck = false;
-  }
-)
+pkgs.easyeffects.overrideAttrs optimization.withMesonClangMold

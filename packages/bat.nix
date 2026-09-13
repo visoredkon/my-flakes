@@ -3,4 +3,4 @@
   pkgs,
 }:
 
-pkgs.bat.overrideAttrs (optimization.withRustOptimizations { })
+pkgs.bat.overrideAttrs optimization.withRustOptimizations

@@ -6,26 +6,27 @@
   ...
 }:
 
+assert release ? rev && release.rev != "";
 assert release ? sourceSha256 && release.sourceSha256 != "";
 assert release ? vendorHash && release.vendorHash != "";
-assert release ? version && release.version != "";
 
 let
   excludedProviders = [
     "archlinuxpkgs"
-    "dnfpackages"
     "aptpackages"
+    "dnfpackages"
   ];
 
   commonArgs = {
     src = pkgs.fetchFromGitHub {
       owner = "abenz1267";
       repo = "elephant";
-      tag = "v${release.version}";
+      inherit (release) rev;
       hash = release.sourceSha256;
     };
 
-    inherit (release) vendorHash version;
+    inherit (release) vendorHash;
+    version = builtins.substring 0 7 release.rev;
   };
 
   elephantBin = optimization.withGoOptimizations (

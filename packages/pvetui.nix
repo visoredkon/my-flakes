@@ -11,7 +11,6 @@ assert release ? vendorHash && release.vendorHash != "";
 assert release ? version && release.version != "";
 
 optimization.withGoOptimizations {
-  goBuilder = pkgs.buildGo126Module;
   pname = "pvetui";
   inherit (release) vendorHash version;
 
