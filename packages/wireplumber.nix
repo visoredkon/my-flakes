@@ -4,7 +4,7 @@
   pkgs,
 }:
 
-(pkgs.easyeffects.override {
+(pkgs.wireplumber.override {
   inherit pipewire;
 }).overrideAttrs
   optimization.withMesonClangMold

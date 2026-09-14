@@ -138,6 +138,9 @@ pkgs.writeShellApplication {
       bootdev | typescript)
         echo "sourceSha256 vendorHash version"
         ;;
+      pvetui)
+        echo "rev sourceSha256 vendorHash version"
+        ;;
       elephant)
         echo "rev sourceSha256 vendorHash"
         ;;
@@ -149,9 +152,6 @@ pkgs.writeShellApplication {
         ;;
       mise)
         echo "sha256 sourceSha256 version"
-        ;;
-      pvetui)
-        echo "rev sourceSha256 vendorHash version"
         ;;
       tinymist)
         echo "completionsSha256 sha256 version"
@@ -604,7 +604,8 @@ pkgs.writeShellApplication {
             return 1
           fi
         else
-          echo "could not figure out vendorHash, set it by hand or run nix build .#$pkg" >&2
+          add_failure "$pkg" "could not figure out vendorHash, set it by hand or run nix build .#$pkg"
+          return 1
         fi
       fi
     }

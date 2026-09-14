@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -81,17 +81,30 @@ jobs:
 
       - name: build shard packages
         run: |
+          failed=0
+          built=0
           i=0
           for pkg in ${{ steps.get-pkgs.outputs.pkgs }}; do
-            if (( i % 4 == ${{ matrix.shard }} )); then
-              nix build ".#packages.x86_64-linux.$pkg" --print-build-logs
-              path=$(nix path-info ".#packages.x86_64-linux.$pkg^out" \
-                --accept-flake-config)
-              cachix push visoredkon "$path"
-              cachix pin visoredkon latest-$pkg "$path" --keep-revisions 1
+            if (( i % ${{ strategy.job-total }} == ${{ matrix.shard }} )); then
+              built=$((built + 1))
+              if nix build ".#packages.x86_64-linux.$pkg" \
+                --print-build-logs --keep-going; then
+                path=$(nix path-info ".#packages.x86_64-linux.$pkg^out" \
+                  --accept-flake-config)
+                cachix push visoredkon "$path"
+                cachix pin visoredkon latest-$pkg "$path" --keep-revisions 1
+              else
+                echo "::error::build failed for $pkg"
+                failed=1
+              fi
             fi
             (( ++i ))
           done
+          if (( built == 0 )); then
+            echo "::error::shard ${{ matrix.shard }} built no packages"
+            exit 1
+          fi
+          exit "$failed"
 
   update-hytale-launcher:
     runs-on: ubuntu-slim

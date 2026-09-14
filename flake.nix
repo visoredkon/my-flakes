@@ -157,18 +157,26 @@
         "bat"
         "btop"
         "delta"
-        "easyeffects"
+        "eza"
         "fastfetch"
         "fd"
         "fish"
         "grim"
         "kitty"
+        "libinput"
+        "mako"
         "neovim-unwrapped"
+        "pipewire"
+        "ripgrep"
+        "rofi"
         "slurp"
         "starship"
         "swappy"
         "walker"
+        "wayvnc"
         "wl-clipboard"
+        "yazi"
+        "zoxide"
       ];
 
       optimizedReleaseNames = [
@@ -191,6 +199,16 @@
 
       obsPackages = pkgs.callPackage ./packages/obs-studio.nix { inherit optimization; };
 
+      hyprPackages = pkgs.callPackage ./packages/hyprland-family.nix {
+        inherit optimization;
+        inherit (optimizedPackages)
+          grim
+          libinput
+          pipewire
+          slurp
+          ;
+      };
+
       optimizedPackages =
         builtins.listToAttrs (
           map (name: {
@@ -205,15 +223,38 @@
           }
         ) optimizedReleases
         // {
+          cliphist = pkgs.callPackage ./packages/cliphist.nix { };
+          easyeffects = pkgs.callPackage ./packages/easyeffects.nix {
+            inherit optimization;
+            inherit (optimizedPackages) pipewire;
+          };
           fprintd = pkgs.callPackage ./packages/fprintd.nix {
             inherit optimization;
             inherit (optimizedPackages) libfprint;
           };
+          inherit (hyprPackages)
+            aquamarine
+            hyprcursor
+            hyprgraphics
+            hypridle
+            hyprland
+            hyprlang
+            hyprlock
+            hyprpaper
+            hyprtoolkit
+            hyprutils
+            hyprwire
+            xdg-desktop-portal-hyprland
+            ;
           inherit (obsPackages)
             obs-studio
             obs-pipewire-audio-capture
             obs-vkcapture
             ;
+          wireplumber = pkgs.callPackage ./packages/wireplumber.nix {
+            inherit optimization;
+            inherit (optimizedPackages) pipewire;
+          };
         };
 
       packageMetadata = builtins.mapAttrs (

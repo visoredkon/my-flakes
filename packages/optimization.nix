@@ -9,6 +9,26 @@ let
     };
   };
 
+  ltoFlagFor = ltoMode: if ltoMode == "full" then " -flto" else "";
+
+  withCMakeClangMoldMode =
+    ltoMode: old:
+    let
+      base = moldEnv old;
+      ltoFlag = ltoFlagFor ltoMode;
+    in
+    base
+    // {
+      doCheck = false;
+      cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
+      ];
+      env = base.env // {
+        NIX_CFLAGS_COMPILE = base.env.NIX_CFLAGS_COMPILE + ltoFlag;
+        NIX_CFLAGS_LINK = base.env.NIX_CFLAGS_LINK + ltoFlag;
+      };
+    };
+
   withMesonClangMoldMode =
     ltoMode: old:
     (moldEnv old)
@@ -23,24 +43,9 @@ let
     };
 in
 {
-  inherit withMesonClangMoldMode;
+  inherit withCMakeClangMoldMode withMesonClangMoldMode;
 
-  withCMakeClangMold =
-    old:
-    let
-      base = moldEnv old;
-    in
-    base
-    // {
-      doCheck = false;
-      cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
-      ];
-      env = base.env // {
-        NIX_CFLAGS_COMPILE = base.env.NIX_CFLAGS_COMPILE + " -flto";
-        NIX_CFLAGS_LINK = base.env.NIX_CFLAGS_LINK + " -flto";
-      };
-    };
+  withCMakeClangMold = withCMakeClangMoldMode "full";
 
   withGoOptimizations =
     {
