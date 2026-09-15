@@ -1,10 +1,6 @@
 {
   optimization,
-  pipewire,
   pkgs,
 }:
 
-(pkgs.easyeffects.override {
-  inherit pipewire;
-}).overrideAttrs
-  optimization.withMesonClangMold
+pkgs.easyeffects.overrideAttrs optimization.withMesonClangMold

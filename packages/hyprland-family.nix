@@ -2,7 +2,6 @@
   grim,
   libinput,
   optimization,
-  pipewire,
   pkgs,
   slurp,
 }:
@@ -73,7 +72,6 @@ let
         hyprland
         hyprlang
         hyprutils
-        pipewire
         slurp
         ;
     }).overrideAttrs

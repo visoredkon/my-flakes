@@ -485,7 +485,7 @@ pkgs.writeShellApplication {
       if [[ "$pkg" == "tinymist" ]]; then
         completionsUrl="https://github.com/Myriad-Dreamin/tinymist/releases/download/v$version/tinymist-completions.tar.gz"
         completionsSha=$(download_source_sha256 "$completionsUrl") || true
-        completionsSha=$(nix hash to-sri --type sha256 "$completionsSha" || true)
+        completionsSha=$(nix hash convert --hash-algo sha256 --to sri "$completionsSha" || true)
         if [[ -z "$completionsSha" ]]; then
           add_failure "$pkg" "failed to determine completionsSha256"
           rm -f "$tmp"
@@ -559,7 +559,7 @@ pkgs.writeShellApplication {
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
       fi
-      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" || true)
+      sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
 
       vendorHash=""
       vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -646,7 +646,7 @@ pkgs.writeShellApplication {
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
       fi
-      sourceSha=$(nix hash to-sri --type sha256 "$sourceSha" || true)
+      sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
 
       case "$pkg" in
       elephant)

@@ -163,11 +163,8 @@
         "fish"
         "grim"
         "kitty"
-        "libinput"
         "mako"
         "neovim-unwrapped"
-        "pipewire"
-        "ripgrep"
         "rofi"
         "slurp"
         "starship"
@@ -201,10 +198,9 @@
 
       hyprPackages = pkgs.callPackage ./packages/hyprland-family.nix {
         inherit optimization;
+        inherit (pkgs) libinput;
         inherit (optimizedPackages)
           grim
-          libinput
-          pipewire
           slurp
           ;
       };
@@ -224,13 +220,16 @@
         ) optimizedReleases
         // {
           cliphist = pkgs.callPackage ./packages/cliphist.nix { };
-          easyeffects = pkgs.callPackage ./packages/easyeffects.nix {
-            inherit optimization;
-            inherit (optimizedPackages) pipewire;
+          easyeffects = pkgs.callPackage ./packages/easyeffects.nix { inherit optimization; };
+          espanso-wayland = pkgs.callPackage ./packages/espanso-wayland.nix {
+            inherit (optimizedPackages) wl-clipboard;
           };
           fprintd = pkgs.callPackage ./packages/fprintd.nix {
             inherit optimization;
             inherit (optimizedPackages) libfprint;
+          };
+          hyprpolkitagent = pkgs.callPackage ./packages/hyprpolkitagent.nix {
+            inherit (hyprPackages) hyprlang hyprutils;
           };
           inherit (hyprPackages)
             aquamarine
@@ -251,10 +250,6 @@
             obs-pipewire-audio-capture
             obs-vkcapture
             ;
-          wireplumber = pkgs.callPackage ./packages/wireplumber.nix {
-            inherit optimization;
-            inherit (optimizedPackages) pipewire;
-          };
         };
 
       packageMetadata = builtins.mapAttrs (
