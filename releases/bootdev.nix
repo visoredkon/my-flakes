@@ -1,5 +1,5 @@
 {
-  sourceSha256 = "sha256-6IwqKV/PWy+QMfHcDmhHvKUo9so5EECXgCrA4hg4oSs=";
-  vendorHash = "sha256-ZDioEU5uPCkd+kC83cLlpgzyOsnpj2S7N+lQgsQb8uY=";
-  version = "1.32.3";
+  sourceSha256 = "sha256-MWK/1hscAky6ampB4n8NQTVchDT0EADRtub+8sgAYXg=";
+  vendorHash = "sha256-LCvJDsg4MANhQ0V/ymP1heCN5rFNgeOYCYILsPdXYag=";
+  version = "1.32.4";
 }
