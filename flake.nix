@@ -21,13 +21,8 @@
     let
       system = "x86_64-linux";
 
-      elephantFixOverlay = _: prev: {
-        buildGo125Module = prev.buildGoModule;
-      };
-
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ elephantFixOverlay ];
         config.allowUnfreePredicate =
           pkg:
           builtins.elem (nixpkgs.lib.getName pkg) [

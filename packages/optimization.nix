@@ -49,7 +49,7 @@ in
 
   withGoOptimizations =
     {
-      goBuilder ? pkgs.buildGo126Module,
+      goBuilder ? pkgs.buildGoModule,
       stdenv ? pkgs.llvmPackages.stdenv,
       ...
     }@args:

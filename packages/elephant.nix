@@ -10,126 +10,55 @@ assert release ? rev && release.rev != "";
 assert release ? sourceSha256 && release.sourceSha256 != "";
 assert release ? vendorHash && release.vendorHash != "";
 
-let
-  excludedProviders = [
-    "archlinuxpkgs"
-    "aptpackages"
-    "dnfpackages"
-  ];
+optimization.withGoOptimizations {
+  goBuilder = pkgs.buildGo127Module;
+  pname = "elephant";
+  version = builtins.substring 0 7 release.rev;
+  inherit (release) vendorHash;
 
-  commonArgs = {
-    src = pkgs.fetchFromGitHub {
-      owner = "abenz1267";
-      repo = "elephant";
-      inherit (release) rev;
-      hash = release.sourceSha256;
-    };
-
-    inherit (release) vendorHash;
-    version = builtins.substring 0 7 release.rev;
+  src = pkgs.fetchFromGitHub {
+    owner = "abenz1267";
+    repo = "elephant";
+    inherit (release) rev;
+    hash = release.sourceSha256;
   };
 
-  elephantBin = optimization.withGoOptimizations (
-    commonArgs
-    // {
-      goBuilder = pkgs.buildGo125Module;
-      pname = "elephant";
+  subPackages = [ "cmd/elephant" ];
 
-      subPackages = [ "cmd/elephant" ];
+  buildInputs = with pkgs; [
+    protobuf
+    wayland
+  ];
 
-      buildInputs = [ pkgs.protobuf ];
-      nativeBuildInputs = with pkgs; [
-        makeWrapper
-        protoc-gen-go
-      ];
+  nativeBuildInputs = with pkgs; [
+    makeWrapper
+    protoc-gen-go
+  ];
 
-      postFixup = ''
-        wrapProgram "$out/bin/elephant" \
-          --prefix PATH : ${lib.makeBinPath [ pkgs.fd ]}
-      '';
-    }
-  );
+  postBuild = ''
+    mkdir -p "$out/lib/elephant/providers"
+    for dir in internal/providers/*/; do
+      provider=$(basename "$dir")
+      case " archlinuxpkgs aptpackages dnfpackages " in
+        *" $provider "*) continue ;;
+      esac
+      go build -buildmode=plugin -ldflags "-s -w" -o "$out/lib/elephant/providers/$provider.so" ./internal/providers/"$provider" || exit 1
+    done
+  '';
 
-  elephantProviders = optimization.withGoOptimizations (
-    commonArgs
-    // {
-      goBuilder = pkgs.buildGo125Module;
-      pname = "elephant-providers";
-
-      buildInputs = [ pkgs.wayland ];
-      nativeBuildInputs = with pkgs; [
-        protobuf
-        protoc-gen-go
-      ];
-
-      buildPhase = ''
-        runHook preBuild
-        echo "Building elephant providers..."
-        EXCLUDE_LIST="${lib.concatStringsSep " " excludedProviders}"
-        is_excluded() {
-          target="$1"
-          for e in $EXCLUDE_LIST; do
-            [ -z "$e" ] && continue
-            if [ "$e" = "$target" ]; then
-              return 0
-            fi
-          done
-          return 1
-        }
-        if [ -d ./internal/providers ]; then
-          for dir in ./internal/providers/*; do
-            [ -d "$dir" ] || continue
-            provider=$(basename "$dir")
-            if is_excluded "$provider"; then
-              echo "Skipping excluded provider: $provider"
-              continue
-            fi
-            set -- "$dir"/*.go
-            if [ -e "$1" ]; then
-              echo "Building provider: $provider"
-              if ! go build -buildmode=plugin -ldflags "-s -w" -o "$provider.so" ./internal/providers/"$provider"; then
-                echo "Failed to build provider: $provider"
-                exit 1
-              fi
-            else
-              echo "Skipping $provider: no .go files found"
-            fi
-          done
-        fi
-        runHook postBuild
-      '';
-
-      installPhase = ''
-        runHook preInstall
-        mkdir -p "$out/lib/elephant/providers"
-        for so_file in *.so; do
-          if [[ -f "$so_file" ]]; then
-            cp "$so_file" "$out/lib/elephant/providers/"
-          fi
-        done
-        runHook postInstall
-      '';
-    }
-  );
-in
-pkgs.runCommand "elephant-with-providers"
-  {
-    buildInputs = [ pkgs.makeWrapper ];
-  }
-  ''
-    mkdir -p "$out/bin" "$out/lib/elephant"
-    cp ${elephantBin}/bin/elephant "$out/bin/"
-    cp -r ${elephantProviders}/lib/elephant/providers "$out/lib/elephant/"
+  postFixup = ''
     wrapProgram "$out/bin/elephant" \
       --prefix PATH : ${
         lib.makeBinPath (
           with pkgs;
           [
             bluez
+            fd
             imagemagick
             libqalculate
             wl-clipboard
           ]
         )
       }
-  ''
+  '';
+}

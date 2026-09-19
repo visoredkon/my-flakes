@@ -1,5 +1,5 @@
 {
-  rev = "953f886cc59bcc2405d6ea1d2c22a82746d872df";
-  sourceSha256 = "sha256-SWum2VW+ucpJ1C239qZ5Vix7SxfI5LRVLD335Fo0Icg=";
-  vendorHash = "sha256-ssX+ZQ6v+XcwC/RuIZ+rO/9zZwZnotudj8bvZNM7M3g=";
+  rev = "a0b55361d1401801d88b7a5551949054507a2245";
+  sourceSha256 = "sha256-tRaYTY/K16inviZKxdbudfTP4JeZINEFJDw9whifJZ8=";
+  vendorHash = "sha256-5AL1731OKp2AZgknZAvcfyL+TuU3DIPozjSItE5nOM8=";
 }
