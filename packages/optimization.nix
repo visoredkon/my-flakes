@@ -41,11 +41,29 @@ let
         "-Dstrip=true"
       ];
     };
+
+  withGoFlags =
+    base: attrs:
+    base
+    // {
+      doCheck = false;
+      ldflags = [
+        "-s"
+        "-w"
+      ]
+      ++ (attrs.ldflags or [ ]);
+      env = base.env // {
+        GOAMD64 = "v3";
+        GOFLAGS = "-trimpath";
+      };
+    };
 in
 {
   inherit withCMakeClangMoldMode withMesonClangMoldMode;
 
   withCMakeClangMold = withCMakeClangMoldMode "full";
+
+  withGoOverride = old: withGoFlags (moldEnv old) old;
 
   withGoOptimizations =
     {
@@ -61,22 +79,7 @@ in
       go = goBuilder.override { inherit stdenv; };
       base = moldEnv b;
     in
-    go (
-      b
-      // base
-      // {
-        doCheck = false;
-        ldflags = [
-          "-s"
-          "-w"
-        ]
-        ++ (b.ldflags or [ ]);
-        env = base.env // {
-          GOAMD64 = "v3";
-          GOFLAGS = "-trimpath";
-        };
-      }
-    );
+    go (withGoFlags (b // base) b);
 
   withMesonClangMold = withMesonClangMoldMode "default";
 

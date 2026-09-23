@@ -300,7 +300,10 @@ pkgs.writeShellApplication {
     root="''${root:-$(pwd)}"
     cd "$root" || exit 1
 
-    git pull || echo "git pull failed, continuing anyway" >&2
+    git pull || {
+      echo "Error: git pull failed, aborting" >&2
+      exit 1
+    }
 
     job_dir=$(mktemp -d)
     job_parent_pid="$BASHPID"
@@ -474,6 +477,7 @@ pkgs.writeShellApplication {
 
       if [[ "$pkg" == "mise" ]]; then
         sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
+        sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
         if [[ -z "$sourceSha" ]]; then
           add_failure "$pkg" "failed to determine sourceSha256"
           rm -f "$tmp"

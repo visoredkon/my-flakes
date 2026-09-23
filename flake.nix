@@ -14,10 +14,15 @@
 
   inputs = {
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.zst";
+    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
   };
 
   outputs =
-    { nixpkgs, self }:
+    {
+      nixpkgs,
+      nix-cachyos-kernel,
+      self,
+    }:
     let
       system = "x86_64-linux";
 
@@ -219,7 +224,7 @@
           }
         ) optimizedReleases
         // {
-          cliphist = pkgs.callPackage ./packages/cliphist.nix { };
+          cliphist = pkgs.callPackage ./packages/cliphist.nix { inherit optimization; };
           easyeffects = pkgs.callPackage ./packages/easyeffects.nix { inherit optimization; };
           espanso-wayland = pkgs.callPackage ./packages/espanso-wayland.nix {
             inherit (optimizedPackages) wl-clipboard;
@@ -268,7 +273,7 @@
             inherit mkProtonCachyos;
             inherit (meta) release urlTemplate;
           }
-        ) (removeAttrs packageMetadata goPackageNames))
+        ) packageMetadata)
         // goPackages;
 
       formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
@@ -303,6 +308,12 @@
         inherit goPackagesConfig;
         inherit branchSourcesConfig;
       };
+
+      cachyos = pkgs.callPackage ./packages/cachyos-kernel.nix {
+        inherit nix-cachyos-kernel system;
+      };
+
+      inherit (cachyos) cachyosPackages cachyosKernels;
 
     in
     {
@@ -485,6 +496,9 @@
                 yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' .
                 touch $out
               '';
+          linux-cachyos-latest-lto-x86_64-v3 = pkgs.runCommand "check-linux-cachyos-latest-lto-x86_64-v3" {
+            buildInputs = [ cachyosPackages.linux-cachyos-latest-lto-x86_64-v3 ];
+          } "touch $out";
         };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
@@ -498,6 +512,7 @@
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
         )
         // {
+          inherit cachyosKernels;
           obs-studio-plugins =
             prev.obs-studio-plugins
             // nixpkgs.lib.genAttrs obsPluginNames (
@@ -505,6 +520,6 @@
             );
         };
 
-      packages.${system} = generatedPackages // optimizedPackages;
+      packages.${system} = generatedPackages // optimizedPackages // cachyosPackages;
     };
 }
