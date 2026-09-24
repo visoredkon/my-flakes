@@ -12,8 +12,12 @@ concurrency:
 jobs:
   update-my-flakes:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       contents: write
+    outputs:
+      updated: ${{ steps.collect.outputs.updated }}
+      pkgs: ${{ steps.collect.outputs.pkgs }}
     env:
       GH_TOKEN: ${{ github.token }}
       GIT_AUTHOR_EMAIL: >-
@@ -30,26 +34,42 @@ jobs:
             "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      - name: install-nix
-        uses: cachix/install-nix-action@v31
-
-      - name: setup cachix
-        uses: cachix/cachix-action@v17
+      - name: setup nix
+        uses: ./.github/actions/setup-nix
         with:
-          name: visoredkon
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          pushFilter: "(-source$|\\.drv$|go-modules)"
+
+      - name: record base revision
+        id: get-base
+        run: |
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: update my-flakes
         run: nix run .#update-release -- --push
 
+      - name: collect outputs
+        id: collect
+        run: |
+          pkgs=$(nix eval --raw ".#packages.x86_64-linux" \
+            --apply 'p: builtins.concatStringsSep " " (builtins.attrNames p)' \
+            --accept-flake-config)
+          echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "${{ steps.get-base.outputs.base }}" HEAD -- \
+            flake.lock flake.nix apps/ packages/ releases/ .github/; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-my-flakes:
     needs: update-my-flakes
+    if: needs.update-my-flakes.outputs.updated == 'true'
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       contents: read
     env:
@@ -61,47 +81,139 @@ jobs:
         with:
           ref: main
 
-      - name: install-nix
-        uses: cachix/install-nix-action@v31
-
-      - name: setup cachix
-        uses: cachix/cachix-action@v17
+      - name: setup nix
+        uses: ./.github/actions/setup-nix
         with:
-          name: visoredkon
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          pushFilter: "(-source$|\\.drv$|go-modules)"
-
-      - name: get packages
-        id: get-pkgs
-        run: |
-          pkgs=$(nix eval --raw ".#packages.x86_64-linux" \
-            --apply 'p: builtins.concatStringsSep " " (builtins.attrNames p)' \
-            --accept-flake-config)
-          echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
 
       - name: build shard packages
         run: |
+          failed_pkgs=()
+          shard_pkgs=()
+          i=0
+          IFS=' ' read -ra all_pkgs <<< "${{ needs.update-my-flakes.outputs.pkgs }}"
+          for pkg in "${all_pkgs[@]}"; do
+            case "$pkg" in
+            linux*) ;;
+            *)
+              if (( i % ${{ strategy.job-total }} == ${{ matrix.shard }} )); then
+                shard_pkgs+=("$pkg")
+              fi
+              (( ++i ))
+              ;;
+            esac
+          done
+          if (( ${#shard_pkgs[@]} == 0 )); then
+            echo "::error::shard ${{ matrix.shard }} built no packages"
+            exit 1
+          fi
+          targets=()
+          for pkg in "${shard_pkgs[@]}"; do
+            targets+=(".#packages.x86_64-linux.$pkg")
+          done
+          if ! nix build --print-build-logs --keep-going "${targets[@]}"; then
+            for pkg in "${shard_pkgs[@]}"; do
+              if ! nix build ".#packages.x86_64-linux.$pkg" \
+                --print-build-logs --keep-going; then
+                echo "::error::build failed for $pkg"
+                failed_pkgs+=("$pkg")
+              fi
+            done
+          fi
+          for pkg in "${shard_pkgs[@]}"; do
+            if [[ " ${failed_pkgs[*]} " == *" $pkg "* ]]; then
+              continue
+            fi
+            path=$(nix path-info ".#packages.x86_64-linux.$pkg^out" \
+              --accept-flake-config)
+            cachix push visoredkon "$path"
+            cachix pin visoredkon "latest-$pkg" "$path" --keep-revisions 1
+          done
+          if (( ${#failed_pkgs[@]} > 0 )); then
+            exit 1
+          fi
+
+  build-kernel:
+    needs: update-my-flakes
+    if: needs.update-my-flakes.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      USER: runner
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: setup nix
+        uses: ./.github/actions/setup-nix
+        with:
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: build kernel packages
+        run: |
           failed=0
           built=0
-          i=0
-          for pkg in ${{ steps.get-pkgs.outputs.pkgs }}; do
-            if (( i % ${{ strategy.job-total }} == ${{ matrix.shard }} )); then
+          IFS=' ' read -ra all_pkgs <<< "${{ needs.update-my-flakes.outputs.pkgs }}"
+          for pkg in "${all_pkgs[@]}"; do
+            case "$pkg" in
+            linux*)
               built=$((built + 1))
-              if nix build ".#packages.x86_64-linux.$pkg" \
+              build_target=".#packages.x86_64-linux.$pkg"
+              out=$(nix eval --raw "$build_target.outPath" \
+                --accept-flake-config)
+              if nix path-info --store "https://visoredkon.cachix.org" "$out" \
+                >/dev/null 2>&1; then
+                echo "cache hit for $pkg, skipping build"
+                continue
+              fi
+              pkg_failed=0
+              log="config-${pkg}.log"
+              if ! nix build "$build_target.configfile" \
+                --print-build-logs > "$log" 2>&1; then
+                echo "::error::kernel config build failed for $pkg, see $log"
+                failed=1
+                continue
+              fi
+              if grep -q "option not set correctly" "$log"; then
+                echo "::error::kernel option forced by select, see $log"
+                grep "option not set correctly" "$log"
+                failed=1
+                continue
+              fi
+              mapfile -t names < <(nix eval --raw \
+                '.#kernelTuning.disabledKernelOptions' \
+                --apply 'builtins.concatStringsSep "\n"' --accept-flake-config)
+              for name in "${names[@]}"; do
+                if grep -q "unused option: ${name}$" "$log"; then
+                  echo "::error::kernel option unused (typo/renamed?): $name"
+                  pkg_failed=1
+                fi
+              done
+              if (( pkg_failed != 0 )); then
+                failed=1
+                continue
+              fi
+              if nix build "$build_target^*" \
                 --print-build-logs --keep-going; then
-                path=$(nix path-info ".#packages.x86_64-linux.$pkg^out" \
-                  --accept-flake-config)
-                cachix push visoredkon "$path"
-                cachix pin visoredkon latest-$pkg "$path" --keep-revisions 1
+                mapfile -t out_paths < <(nix build --print-out-paths --no-link \
+                  "$build_target^*")
+                nix path-info -r "${out_paths[@]}" \
+                  | xargs cachix push visoredkon
+                cachix pin visoredkon "latest-$pkg" "$out" --keep-revisions 1
               else
                 echo "::error::build failed for $pkg"
                 failed=1
               fi
-            fi
-            (( ++i ))
+              ;;
+            esac
           done
           if (( built == 0 )); then
-            echo "::error::shard ${{ matrix.shard }} built no packages"
+            echo "::error::no kernel packages found"
             exit 1
           fi
           exit "$failed"

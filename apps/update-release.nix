@@ -9,7 +9,15 @@
 
 let
   metaJson = builtins.toJSON (
-    lib.mapAttrs (_: v: { inherit (v) baseUrl urlTemplate; }) packageMetadata
+    lib.mapAttrs (
+      _: v:
+      {
+        inherit (v) baseUrl urlTemplate;
+      }
+      // lib.optionalAttrs (v ? releaseFields) { inherit (v) releaseFields; }
+      // lib.optionalAttrs (v ? needsVscodeVersion) { inherit (v) needsVscodeVersion; }
+      // lib.optionalAttrs (v ? vscodeProductPath) { inherit (v) vscodeProductPath; }
+    ) packageMetadata
   );
   goPackagesJson = builtins.toJSON goPackagesConfig;
   branchSourcesJson = builtins.toJSON branchSourcesConfig;
@@ -38,6 +46,151 @@ pkgs.writeShellApplication {
     failureMessages=()
     updates=()
     updated_packages=()
+    uptodate_packages=()
+
+    start_seconds=$SECONDS
+
+    use_color=false
+    if [[ -t 2 && -z "''${NO_COLOR:-}" ]]; then
+      use_color=true
+    fi
+
+    if [[ "$use_color" == "true" ]]; then
+      c_reset=$'\e[0m'
+      c_bold=$'\e[1m'
+      c_green=$'\e[32m'
+      c_yellow=$'\e[33m'
+      c_red=$'\e[31m'
+      c_cyan=$'\e[36m'
+      c_dim=$'\e[2m'
+    else
+      c_reset=""
+      c_bold=""
+      c_green=""
+      c_yellow=""
+      c_red=""
+      c_cyan=""
+      c_dim=""
+    fi
+
+    status_line() {
+      local kind="$1"
+      shift
+      local code="$c_reset"
+
+      case "$kind" in
+      ok)
+        code="$c_green"
+        ;;
+      update)
+        code="$c_yellow"
+        ;;
+      fail)
+        code="$c_red"
+        ;;
+      phase)
+        code="$c_cyan"
+        ;;
+      detail)
+        code="$c_dim"
+        ;;
+      header)
+        code="$c_bold"
+        ;;
+      esac
+
+      if [[ "$use_color" == "true" ]]; then
+        printf '%b%s%b\n' "$code" "$*" "$c_reset" >&2
+      else
+        printf '%s\n' "$*" >&2
+      fi
+    }
+
+    short_url() {
+      local trimmed="''${1#https://}"
+      trimmed="''${trimmed#http://}"
+
+      if (( ''${#trimmed} > 90 )); then
+        echo "''${trimmed:0:50}...''${trimmed: -37}"
+      else
+        echo "$trimmed"
+      fi
+    }
+
+    human_bytes() {
+      numfmt --to=iec "$1" 2>/dev/null || echo "$1"
+    }
+
+    note_fetch() {
+      local url="$1"
+      local size="''${2:-}"
+
+      if [[ -n "$size" ]]; then
+        echo "fetch $(short_url "$url") ($size) ... done" >&2
+      else
+        echo "fetch $(short_url "$url") ... done" >&2
+      fi
+    }
+
+    fetch_binary() {
+      local url="$1"
+      local dest="$2"
+
+      if ! curl_retry -L -sS -o "$dest" "$url"; then
+        return 1
+      fi
+
+      local bytes
+      bytes=$(stat -c%s "$dest" 2>/dev/null || echo "")
+
+      if [[ -n "$bytes" ]]; then
+        note_fetch "$url" "$(human_bytes "$bytes")"
+      else
+        note_fetch "$url"
+      fi
+    }
+
+    prefetch_source() {
+      local url="$1"
+      local hash
+
+      hash=$(nix-prefetch-url --unpack "$url" || true)
+
+      if [[ -z "$hash" ]]; then
+        return 1
+      fi
+
+      note_fetch "$url"
+      echo "$hash"
+    }
+
+    record_uptodate() {
+      printf 'uptodate\n%s\n' "$1" > "$result_file"
+    }
+
+    run_phase() {
+      local label="$1"
+      shift
+      local phase_start=$SECONDS
+      local output
+      local code=0
+
+      output=$("$@" 2>&1) || code=$?
+
+      if [[ -n "$output" ]]; then
+        printf '%s\n' "$output" | grep -v "Git tree.*is dirty" >&2 || true
+      fi
+
+      local phase_elapsed=$((SECONDS - phase_start))
+
+      if (( code == 0 )); then
+        status_line phase "[phase] $label ... ok (''${phase_elapsed}s)"
+        return 0
+      else
+        status_line fail "[phase] $label ... failed (''${phase_elapsed}s)"
+        return "$code"
+      fi
+    }
 
     add_failure() {
       local pkg="$1"
@@ -58,10 +211,13 @@ pkgs.writeShellApplication {
       job_id=$((job_id + 1))
       status_file="$job_dir/$job_id.status"
       result_file="$job_dir/$job_id.result"
+      job_log="$job_dir/$job_id.log"
       : > "$result_file"
+      : > "$job_log"
       job_packages+=("$pkg")
       job_status_files+=("$status_file")
       job_result_files+=("$result_file")
+      job_log_files+=("$job_log")
     }
 
     short_rev() {
@@ -74,6 +230,17 @@ pkgs.writeShellApplication {
       else
         echo "unknown"
       fi
+    }
+
+    display_revision() {
+      case "$1" in
+      elephant | libfprint | waybar)
+        short_rev "$2"
+        ;;
+      *)
+        display_version "$2"
+        ;;
+      esac
     }
 
     join_packages() {
@@ -105,11 +272,21 @@ pkgs.writeShellApplication {
 
       local sha
       sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+
+      local bytes
+      bytes=$(stat -c%s "$tmp" 2>/dev/null || echo "")
+
       rm -f "$tmp"
 
       if [[ -z "$sha" ]]; then
         echo ""
         return 1
+      fi
+
+      if [[ -n "$bytes" ]]; then
+        note_fetch "$url" "$(human_bytes "$bytes")"
+      else
+        note_fetch "$url"
       fi
 
       echo "$sha"
@@ -129,12 +306,6 @@ pkgs.writeShellApplication {
 
     release_fields_for_package() {
       case "$1" in
-      antigravity)
-        echo "sha256 url version vscodeVersion"
-        ;;
-      antigravity-cli)
-        echo "sha256 url version"
-        ;;
       bootdev | typescript)
         echo "sourceSha256 vendorHash version"
         ;;
@@ -144,20 +315,11 @@ pkgs.writeShellApplication {
       elephant)
         echo "rev sourceSha256 vendorHash"
         ;;
-      kiro)
-        echo "sha256 version vscodeVersion"
-        ;;
       libfprint | waybar)
         echo "rev sourceSha256"
         ;;
-      mise)
-        echo "sha256 sourceSha256 version"
-        ;;
-      tinymist)
-        echo "completionsSha256 sha256 version"
-        ;;
       *)
-        echo "sha256 version"
+        jq -r --arg pkg "$1" '.[$pkg].releaseFields // ["sha256", "version"] | join(" ")' <<<"$meta"
         ;;
       esac
     }
@@ -196,10 +358,8 @@ pkgs.writeShellApplication {
 
     parse_update() {
       IFS=':' read -r pkg from_version to_version <<<"$1"
-      if [[ "''${pkg:-}" == "elephant" || "''${pkg:-}" == "libfprint" || "''${pkg:-}" == "waybar" ]]; then
-        from_version=$(short_rev "$from_version")
-        to_version=$(short_rev "$to_version")
-      fi
+      from_version=$(display_revision "$pkg" "$from_version")
+      to_version=$(display_revision "$pkg" "$to_version")
     }
 
     usage() {
@@ -250,7 +410,7 @@ pkgs.writeShellApplication {
       local from="$1"
       local to="$2"
 
-      printf '%s\n%s\n' "$from" "$to" > "$result_file"
+      printf 'updated\n%s\n%s\n' "$from" "$to" > "$result_file"
       echo "wrote $releaseFile" >&2
     }
 
@@ -311,6 +471,7 @@ pkgs.writeShellApplication {
     job_packages=()
     job_status_files=()
     job_result_files=()
+    job_log_files=()
     job_id=0
 
     cleanup_jobs() {
@@ -364,8 +525,10 @@ pkgs.writeShellApplication {
       local target="$2"
 
       prepare_job "$target"
+      status_line detail "=> check $target ..."
 
       (
+        exec > "$job_log" 2>&1
         local pkg="$target"
         job_failed=false
         "$update_func" "$pkg"
@@ -384,6 +547,8 @@ pkgs.writeShellApplication {
       local pkg="$1"
       baseUrl=$(jq -r --arg pkg "$pkg" '.[$pkg].baseUrl' <<<"$meta")
       urlTemplate=$(jq -r --arg pkg "$pkg" '.[$pkg].urlTemplate' <<<"$meta")
+      needsVscodeVersion=$(jq -r --arg pkg "$pkg" '.[$pkg].needsVscodeVersion // false' <<<"$meta")
+      vscodeProductPath=$(jq -r --arg pkg "$pkg" '.[$pkg].vscodeProductPath // empty' <<<"$meta")
       releaseFile="releases/$pkg.nix"
       url=""
       version=""
@@ -440,6 +605,7 @@ pkgs.writeShellApplication {
         fi
 
         echo "$pkg already on $version" >&2
+        record_uptodate "$version"
         return 0
       fi
 
@@ -456,7 +622,7 @@ pkgs.writeShellApplication {
 
       tmp=$(mktemp)
 
-      if ! curl_retry -L -sS -o "$tmp" "$url"; then
+      if ! fetch_binary "$url" "$tmp"; then
         add_failure "$pkg" "failed to download binary version $version"
         rm -f "$tmp"
         return 1
@@ -471,8 +637,8 @@ pkgs.writeShellApplication {
       fi
 
       vscodeVersion=""
-      if [[ "$pkg" == "kiro" ]]; then
-        vscodeVersion=$(tar -Oxzf "$tmp" "Kiro/resources/app/product.json" | jq -r '.vsCodeVersion // ""' || true)
+      if [[ "$needsVscodeVersion" == "true" && -n "$vscodeProductPath" ]]; then
+        vscodeVersion=$(tar -Oxzf "$tmp" "$vscodeProductPath" | jq -r '.vsCodeVersion // ""' || true)
       fi
 
       if [[ "$pkg" == "mise" ]]; then
@@ -497,7 +663,7 @@ pkgs.writeShellApplication {
         fi
       fi
 
-      if [[ "$pkg" == "antigravity" || "$pkg" == "kiro" ]] && [[ -z "$vscodeVersion" ]]; then
+      if [[ "$needsVscodeVersion" == "true" && -z "$vscodeVersion" ]]; then
         add_failure "$pkg" "failed to determine vscodeVersion"
         rm -f "$tmp"
         return 1
@@ -543,6 +709,7 @@ pkgs.writeShellApplication {
         fi
 
         echo "$pkg already on $version" >&2
+        record_uptodate "$version"
         return 0
       fi
 
@@ -558,7 +725,7 @@ pkgs.writeShellApplication {
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
       sourceSha=""
-      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" || true)
+      sourceSha=$(prefetch_source "$sourceUrl" || true)
       if [[ -z "$sourceSha" ]]; then
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
@@ -638,6 +805,7 @@ pkgs.writeShellApplication {
         fi
 
         echo "$pkg already on $rev" >&2
+        record_uptodate "$rev"
         return 0
       fi
 
@@ -645,7 +813,7 @@ pkgs.writeShellApplication {
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/$rev.tar.gz"
       sourceSha=""
-      sourceSha=$(nix-prefetch-url --unpack "$sourceUrl" || true)
+      sourceSha=$(prefetch_source "$sourceUrl" || true)
       if [[ -z "$sourceSha" ]]; then
         add_failure "$pkg" "failed to compute sourceSha256"
         return 1
@@ -683,18 +851,26 @@ pkgs.writeShellApplication {
     }
 
     meta='${metaJson}'
+    goPackages='${goPackagesJson}'
+    branchSources='${branchSourcesJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
+
+    total_packages=0
+    total_packages=$((total_packages + $(jq 'keys | length' <<<"$meta")))
+    total_packages=$((total_packages + $(jq 'keys | length' <<<"$goPackages")))
+    total_packages=$((total_packages + $(jq 'keys | length' <<<"$branchSources")))
+
+    status_line header "update-release: checking $total_packages packages ($max_jobs parallel jobs)"
+    printf '\n' >&2
 
     for pkg in $package_names; do
       spawn_job update_package "$pkg"
     done
 
-    goPackages='${goPackagesJson}'
     for pkg in $(jq -r 'keys[]' <<<"$goPackages"); do
       spawn_job update_go_package "$pkg"
     done
 
-    branchSources='${branchSourcesJson}'
     for pkg in $(jq -r 'keys[]' <<<"$branchSources"); do
       spawn_job update_branch_package "$pkg"
     done
@@ -703,10 +879,14 @@ pkgs.writeShellApplication {
       wait "$pid" 2>/dev/null || true
     done
 
+    printf '\n' >&2
+    status_line header "--- packages ---"
+
     for job_index in "''${!job_pids[@]}"; do
       pkg="''${job_packages[$job_index]}"
       status_file="''${job_status_files[$job_index]}"
       result_file="''${job_result_files[$job_index]}"
+      log_file="''${job_log_files[$job_index]}"
       message=""
 
       wait "''${job_pids[$job_index]}" 2>/dev/null || true
@@ -715,59 +895,89 @@ pkgs.writeShellApplication {
       if [[ "$message" != "success" ]]; then
         if [[ -z "$message" ]]; then
           message="failed to update package"
-          echo "Error: $pkg: $message" >&2
         fi
         collect_job_failure "$pkg" "$message"
+        status_line fail "fail $pkg: $message"
+        status_line detail "  log excerpt ($log_file):"
+        tail -n 5 "$log_file" 2>/dev/null | awk '{print "  " $0}' >&2 || true
         continue
       fi
 
-      if [[ -s "$result_file" ]]; then
-        mapfile -t job_result < "$result_file"
-        if [[ "''${#job_result[@]}" -ne 2 ]]; then
-          message="failed to parse package update result"
-          echo "Error: $pkg: $message" >&2
-          collect_job_failure "$pkg" "$message"
-          continue
-        fi
-        updates+=("$pkg:$(display_version "''${job_result[0]}"):''${job_result[1]}")
+      mapfile -t job_result < "$result_file"
+      kind="''${job_result[0]:-}"
+
+      if [[ "$kind" == "updated" && "''${#job_result[@]}" -eq 3 ]]; then
+        from_raw="''${job_result[1]}"
+        to_raw="''${job_result[2]}"
+        updates+=("$pkg:$(display_version "$from_raw"):$to_raw")
         updated_packages+=("$pkg")
+        from_disp=$(display_revision "$pkg" "$from_raw")
+        to_disp=$(display_revision "$pkg" "$to_raw")
+        status_line update "update $pkg: $from_disp -> $to_disp"
+        grep -E "^(fetch |wrote |vendorHash unchanged|found vendorHash|get vendorHash)" "$log_file" 2>/dev/null | awk '{print "  " $0}' >&2 || true
+      elif [[ "$kind" == "uptodate" && "''${#job_result[@]}" -eq 2 ]]; then
+        current_raw="''${job_result[1]}"
+        current_disp=$(display_revision "$pkg" "$current_raw")
+        uptodate_packages+=("$pkg")
+        status_line ok "ok $pkg $current_disp (up-to-date)"
+      else
+        message="failed to parse package update result"
+        collect_job_failure "$pkg" "$message"
+        status_line fail "fail $pkg: $message"
+        tail -n 5 "$log_file" 2>/dev/null | awk '{print "  " $0}' >&2 || true
+        continue
       fi
     done
 
+    printf '\n' >&2
+    status_line header "--- summary ---"
+
+    if (( ''${#updated_packages[@]} > 0 )); then
+      status_line update "updated (''${#updated_packages[@]}): $(join_packages "''${updated_packages[@]}")"
+    else
+      status_line update "updated (0): -"
+    fi
+
+    if (( ''${#uptodate_packages[@]} > 0 )); then
+      status_line ok "up-to-date (''${#uptodate_packages[@]}): $(join_packages "''${uptodate_packages[@]}")"
+    else
+      status_line ok "up-to-date (0): -"
+    fi
+
+    if (( ''${#failurePackages[@]} > 0 )); then
+      status_line fail "failed (''${#failurePackages[@]}): $(join_packages "''${failurePackages[@]}")"
+    else
+      status_line fail "failed (0): -"
+    fi
+
     if [[ "''${#failurePackages[@]}" -gt 0 ]]; then
-      echo "failed:" >&2
+      printf '\n' >&2
+      status_line fail "failed:"
       for failureIndex in "''${!failurePackages[@]}"; do
-        echo "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}" >&2
+        status_line fail "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}"
       done
       exit 1
     fi
 
-    echo "" >&2
-    echo "update flake.lock to latest inputs" >&2
-    if ! nix flake update; then
-      echo "Warning: flake update failed, continuing with existing flake.lock" >&2
+    printf '\n' >&2
+    status_line header "--- phases ---"
+
+    if ! run_phase "flake.lock update" nix flake update; then
+      status_line detail "Warning: flake update failed, continuing with existing flake.lock"
     fi
 
-    echo "" >&2
-    echo "format" >&2
-    if ! nix fmt; then
-      echo "Warning: fmt failed, continuing with unformatted files" >&2
+    if ! run_phase "format (nix fmt)" nix fmt; then
+      status_line detail "Warning: fmt failed, continuing with unformatted files"
     fi
 
-    echo "" >&2
-    echo "lint checks" >&2
-    nix build --no-link \
+    run_phase "lint checks" nix build --no-link \
       ".#checks.x86_64-linux.embedded-lint" \
       ".#checks.x86_64-linux.format" \
       ".#checks.x86_64-linux.linter" \
       ".#checks.x86_64-linux.yamllint"
 
-    if [[ "''${#updates[@]}" -eq 0 ]]; then
-      echo "nothing new" >&2
-    fi
-
-    echo "" >&2
     if [[ "$COMMIT" == "true" ]]; then
+      echo "" >&2
       echo "stage releases, formatted files, and flake.lock for commit" >&2
       git add flake.lock flake.nix apps/ packages/ releases/
 
@@ -811,7 +1021,8 @@ pkgs.writeShellApplication {
       fi
     fi
 
-    echo "" >&2
-    echo "done" >&2
+    printf '\n' >&2
+    total_elapsed=$((SECONDS - start_seconds))
+    status_line header "done in ''${total_elapsed}s"
   '';
 }

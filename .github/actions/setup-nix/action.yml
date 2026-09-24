@@ -1,0 +1,18 @@
+name: setup-nix
+description: Install Nix and configure the Cachix binary cache
+inputs:
+  authToken:
+    description: Cachix authentication token
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: install-nix
+      uses: cachix/install-nix-action@v31
+
+    - name: setup cachix
+      uses: cachix/cachix-action@v17
+      with:
+        name: visoredkon
+        authToken: ${{ inputs.authToken }}
+        pushFilter: "(-source$|\\.drv$|go-modules)"

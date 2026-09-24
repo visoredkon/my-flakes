@@ -14,7 +14,9 @@
 
   inputs = {
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.zst";
-    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
+    nix-cachyos-kernel = {
+      url = "github:xddxdd/nix-cachyos-kernel/release";
+    };
   };
 
   outputs =
@@ -52,11 +54,23 @@
         "antigravity" = {
           baseUrl = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
           binName = "antigravity";
+          needsVscodeVersion = true;
+          releaseFields = [
+            "sha256"
+            "url"
+            "version"
+            "vscodeVersion"
+          ];
           urlTemplate = "";
         };
         "antigravity-cli" = {
           baseUrl = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app";
           binName = "agy";
+          releaseFields = [
+            "sha256"
+            "url"
+            "version"
+          ];
           urlTemplate = "";
         };
         "bun" = rec {
@@ -82,7 +96,14 @@
         "kiro" = rec {
           baseUrl = "https://prod.download.desktop.kiro.dev";
           binName = "kiro";
+          needsVscodeVersion = true;
+          releaseFields = [
+            "sha256"
+            "version"
+            "vscodeVersion"
+          ];
           urlTemplate = "${baseUrl}/releases/stable/linux-x64/signed/{version}/tar/kiro-ide-{version}-stable-linux-x64.tar.gz";
+          vscodeProductPath = "Kiro/resources/app/product.json";
         };
         "kiro-cli" = rec {
           baseUrl = "https://prod.download.cli.kiro.dev/stable";
@@ -92,6 +113,11 @@
         "mise" = rec {
           baseUrl = "https://github.com/jdx/mise/releases/download";
           binName = "mise";
+          releaseFields = [
+            "sha256"
+            "sourceSha256"
+            "version"
+          ];
           urlTemplate = "${baseUrl}/v{version}/mise-v{version}-linux-x64.tar.gz";
         };
         "opencode" = rec {
@@ -106,6 +132,11 @@
         "tinymist" = rec {
           baseUrl = "https://github.com/Myriad-Dreamin/tinymist/releases/download";
           binName = "tinymist";
+          releaseFields = [
+            "completionsSha256"
+            "sha256"
+            "version"
+          ];
           urlTemplate = "${baseUrl}/v{version}/tinymist-x86_64-unknown-linux-gnu.tar.gz";
         };
         "typst" = rec {
@@ -313,7 +344,7 @@
         inherit nix-cachyos-kernel system;
       };
 
-      inherit (cachyos) cachyosPackages cachyosKernels;
+      inherit (cachyos) cachyosPackages disabledKernelOptions;
 
     in
     {
@@ -496,9 +527,29 @@
                 yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' .
                 touch $out
               '';
-          linux-cachyos-latest-lto-x86_64-v3 = pkgs.runCommand "check-linux-cachyos-latest-lto-x86_64-v3" {
-            buildInputs = [ cachyosPackages.linux-cachyos-latest-lto-x86_64-v3 ];
+          linux_cachyos_latest_lto_x86_64_v3 = pkgs.runCommand "check-linux_cachyos_latest_lto_x86_64_v3" {
+            buildInputs = [ cachyosPackages.linux_cachyos_latest_lto_x86_64_v3 ];
           } "touch $out";
+          linux_cachyos_config_assert =
+            pkgs.runCommand "check-linux-cachyos-config-assert"
+              {
+                config = cachyosPackages.linux_cachyos_latest_lto_x86_64_v3.configfile;
+              }
+              (
+                ''
+                  grep -q '^CONFIG_SCHED_BORE=y' "$config"
+                  grep -q '^CONFIG_NO_HZ_IDLE=y' "$config"
+                  grep -q '^CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=y' "$config"
+                  grep -q '^CONFIG_X86_64_VERSION=3' "$config"
+                  grep -q '^CONFIG_LTO_CLANG_THIN=y' "$config"
+                  grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$config"
+                  ! grep -q '^CONFIG_RUST=y' "$config"
+                ''
+                + pkgs.lib.concatMapStringsSep "\n" (
+                  name: "! grep -q '^CONFIG_${name}=[ym]' \"$config\""
+                ) disabledKernelOptions
+                + "\ntouch $out\n"
+              );
         };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
@@ -511,8 +562,8 @@
         // nixpkgs.lib.genAttrs goPackageNames (
           name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
         )
+        // cachyosPackages
         // {
-          inherit cachyosKernels;
           obs-studio-plugins =
             prev.obs-studio-plugins
             // nixpkgs.lib.genAttrs obsPluginNames (
@@ -520,6 +571,17 @@
             );
         };
 
-      packages.${system} = generatedPackages // optimizedPackages // cachyosPackages;
+      packages.${system} =
+        generatedPackages
+        // optimizedPackages
+        // {
+          inherit (cachyosPackages) linux_cachyos_latest_lto_x86_64_v3;
+        };
+
+      legacyPackages.${system} = cachyosPackages;
+
+      kernelTuning = {
+        inherit disabledKernelOptions;
+      };
     };
 }
