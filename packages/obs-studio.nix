@@ -7,7 +7,7 @@ let
   obs-studio = (pkgs.obs-studio.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs (
     old:
     let
-      base = optimization.withCMakeClangMold old;
+      base = optimization.withCMakeClangMoldMode "thin" old;
     in
     base
     // {
