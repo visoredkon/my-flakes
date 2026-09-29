@@ -692,7 +692,7 @@ pkgs.writeShellApplication {
 
       echo "check go package $pkg ($repoOwner/$repoName)" >&2
 
-      current_tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '.[0]' || true)
+      current_tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '[.[] | select(.name | test("^v[0-9]"))][0]' || true)
       tag=$(jq -r '.name // ""' <<<"$current_tag")
       version="''${tag#v}"
 
