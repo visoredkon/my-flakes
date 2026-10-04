@@ -1,6 +1,6 @@
 {
-  rev = "50be5bde621021cb25e7c6ff52711e91c6ad291b";
-  sourceSha256 = "sha256-8mfp5bfROqT6DcxByaHZRTkDHJpfclCpeaJaINLKmlk=";
-  vendorHash = "sha256-7Tuh9T3uTlNxdSlSL7gQIYXpfpNbCkQrRWj/FoU8fbU=";
-  version = "1.4.3";
+  rev = "a01395b8200334adbb7cff1c91aec959dd5d495f";
+  sourceSha256 = "sha256-v17/26uqZ5481qYxJpljehse0mUq1uTS3Vdm+NFnONI=";
+  vendorHash = "sha256-WJhQVt+UZj5N+P6spH9soS2UMnaWt2/rj1juiMF6fWU=";
+  version = "1.4.4";
 }
