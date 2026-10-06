@@ -90,16 +90,41 @@ jobs:
         run: |
           failed_pkgs=()
           shard_pkgs=()
+          pinned_shard() {
+            case "$1" in
+            hypr*|aquamarine|xdg-desktop-portal-hyprland|grim|slurp)
+              printf 4
+              return 0
+              ;;
+            obs-studio|obs-pipewire-audio-capture|obs-vkcapture)
+              printf 2
+              return 0
+              ;;
+            libfprint|fprintd)
+              printf 0
+              return 0
+              ;;
+            wl-clipboard|espanso-wayland)
+              printf 5
+              return 0
+              ;;
+            esac
+            return 1
+          }
           i=0
           IFS=' ' read -ra all_pkgs <<< "${{ needs.update-my-flakes.outputs.pkgs }}"
           for pkg in "${all_pkgs[@]}"; do
             case "$pkg" in
             linux*) ;;
             *)
-              if (( i % ${{ strategy.job-total }} == ${{ matrix.shard }} )); then
+              s=$(( i % ${{ strategy.job-total }} ))
+              (( ++i ))
+              if p=$(pinned_shard "$pkg"); then
+                s="$p"
+              fi
+              if (( s == ${{ matrix.shard }} )); then
                 shard_pkgs+=("$pkg")
               fi
-              (( ++i ))
               ;;
             esac
           done
