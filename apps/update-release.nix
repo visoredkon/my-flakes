@@ -587,6 +587,9 @@ pkgs.writeShellApplication {
       elif [[ "$baseUrl" == *"releases.warp.dev"* ]]; then
         redirect=$(curl_retry -sL --max-redirs 10 -o /dev/null -w '%{url_effective}' 'https://app.warp.dev/download?package=pacman' || true)
         version=$(echo "$redirect" | gawk 'match($0, /\/v([^\/]+)\//, m) { print m[1] }' || true)
+      elif [[ "$baseUrl" == *"ntn.dev"* ]]; then
+        version=$(curl_retry -fsSL "$baseUrl/latest.txt" | tr -d '[:space:]' || true)
+        version="''${version#v}"
       else
         add_failure "$pkg" "automatic version discovery not supported"
         return 1

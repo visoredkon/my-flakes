@@ -9,7 +9,22 @@ let
     };
   };
 
-  ltoFlagFor = ltoMode: if ltoMode == "full" then " -flto" else "";
+  ltoFlagFor =
+    ltoMode:
+    if ltoMode == "full" then
+      " -flto"
+    else if ltoMode == "thin" then
+      " -flto=thin"
+    else
+      "";
+
+  cgoDisabled =
+    attrs:
+    let
+      env = attrs.env or { };
+      v = env.CGO_ENABLED or (attrs.CGO_ENABLED or "");
+    in
+    toString v == "0";
 
   withCMakeClangMoldMode =
     ltoMode: old:
@@ -52,7 +67,7 @@ let
         "-w"
       ]
       ++ (attrs.ldflags or [ ]);
-      env = base.env // {
+      env = (base.env or { }) // {
         GOAMD64 = "v3";
         GOFLAGS = "-trimpath";
       };
@@ -63,7 +78,7 @@ in
 
   withCMakeClangMold = withCMakeClangMoldMode "full";
 
-  withGoOverride = old: withGoFlags (moldEnv old) old;
+  withGoOverride = old: withGoFlags (if cgoDisabled old then old else moldEnv old) old;
 
   withGoOptimizations =
     {
@@ -77,7 +92,7 @@ in
         "stdenv"
       ];
       go = goBuilder.override { inherit stdenv; };
-      base = moldEnv b;
+      base = if cgoDisabled b then b else moldEnv b;
     in
     go (withGoFlags (b // base) b);
 

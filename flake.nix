@@ -45,6 +45,7 @@
       optimization = pkgs.callPackage ./packages/optimization.nix { };
 
       disabledPackages = [
+        "claude-code"
         "kiro"
         "kiro-cli"
         "warp-terminal"
@@ -119,6 +120,11 @@
             "version"
           ];
           urlTemplate = "${baseUrl}/v{version}/mise-v{version}-linux-x64.tar.gz";
+        };
+        "ntn" = rec {
+          baseUrl = "https://ntn.dev";
+          binName = "ntn";
+          urlTemplate = "${baseUrl}/releases/v{version}/ntn-x86_64-unknown-linux-musl.tar.gz";
         };
         "opencode" = rec {
           baseUrl = "https://github.com/anomalyco/opencode/releases/download";

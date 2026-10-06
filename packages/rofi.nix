@@ -4,5 +4,9 @@
 }:
 
 pkgs.rofi.override {
-  rofi-unwrapped = pkgs.rofi-unwrapped.overrideAttrs optimization.withMesonClangMold;
+  rofi-unwrapped =
+    (pkgs.rofi-unwrapped.override {
+      stdenv = pkgs.llvmPackages.stdenv;
+    }).overrideAttrs
+      optimization.withMesonClangMold;
 }
