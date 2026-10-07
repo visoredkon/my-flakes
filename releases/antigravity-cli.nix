@@ -1,5 +1,5 @@
 {
-  sha256 = "b0ed8a7c375b5af3af973f08a601e41aebb38bac7e80b922ab54d973a4275493";
-  url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.2.17-6683332533157888/linux-x64/cli_linux_x64.tar.gz";
-  version = "1.2.17";
+  sha256 = "0e313b309ea58c71431ce86bb820936a3700e17e44eabce7bf2264617dc822db";
+  url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.3.1-4582356770750464/linux-x64/cli_linux_x64.tar.gz";
+  version = "1.3.1";
 }
