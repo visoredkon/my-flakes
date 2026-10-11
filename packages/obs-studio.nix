@@ -7,10 +7,14 @@ let
   obs-studio = (pkgs.obs-studio.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs (
     old:
     let
-      base = optimization.withCMakeClangMoldMode "thin" old;
+      base = optimization.withCMakeClangMoldMode "none" old;
     in
     base
     // {
+      cmakeFlags =
+        builtins.filter (f: f != "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON") (base.cmakeFlags or [ ])
+        ++ [ "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF" ];
+
       postPatch = (old.postPatch or "") + ''
         substituteInPlace plugins/obs-nvenc/CMakeLists.txt \
           --replace-fail "add_subdirectory(obs-nvenc-test)" ""

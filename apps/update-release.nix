@@ -16,6 +16,7 @@ let
       }
       // lib.optionalAttrs (v ? releaseFields) { inherit (v) releaseFields; }
       // lib.optionalAttrs (v ? needsVscodeVersion) { inherit (v) needsVscodeVersion; }
+      // lib.optionalAttrs (v ? npmTag) { inherit (v) npmTag; }
       // lib.optionalAttrs (v ? vscodeProductPath) { inherit (v) vscodeProductPath; }
     ) packageMetadata
   );
@@ -590,6 +591,10 @@ pkgs.writeShellApplication {
       elif [[ "$baseUrl" == *"ntn.dev"* ]]; then
         version=$(curl_retry -fsSL "$baseUrl/latest.txt" | tr -d '[:space:]' || true)
         version="''${version#v}"
+      elif [[ "$baseUrl" == *"registry.npmjs.org"* ]]; then
+        npmTag=$(jq -r --arg pkg "$pkg" '.[$pkg].npmTag // "latest"' <<<"$meta")
+        metadata=$(curl_retry -fsSL "$baseUrl" || true)
+        version=$(jq -r --arg tag "$npmTag" '.["dist-tags"][$tag] // ""' <<<"$metadata")
       else
         add_failure "$pkg" "automatic version discovery not supported"
         return 1

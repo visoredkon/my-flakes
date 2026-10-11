@@ -126,10 +126,16 @@
           binName = "ntn";
           urlTemplate = "${baseUrl}/releases/v{version}/ntn-x86_64-unknown-linux-musl.tar.gz";
         };
+        "openchamber-desktop" = rec {
+          baseUrl = "https://github.com/openchamber/openchamber/releases/download";
+          binName = "openchamber-desktop";
+          urlTemplate = "${baseUrl}/v{version}/OpenChamber-{version}-linux-x86_64.AppImage";
+        };
         "opencode" = rec {
-          baseUrl = "https://github.com/anomalyco/opencode/releases/download";
+          baseUrl = "https://registry.npmjs.org/@opencode/cli-linux-x64";
           binName = "opencode";
-          urlTemplate = "${baseUrl}/v{version}/opencode-linux-x64.tar.gz";
+          npmTag = "dev";
+          urlTemplate = "${baseUrl}/-/cli-linux-x64-{version}.tgz";
         };
         "proton-cachyos-x86_64-v3" = rec {
           baseUrl = "https://github.com/CachyOS/proton-cachyos";
