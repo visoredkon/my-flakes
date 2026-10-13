@@ -25,7 +25,14 @@ pkgs.appimageTools.wrapType2 {
 
   extraInstallCommands = ''
     install -m 444 -D ${appimageContents}/openchamber.desktop $out/share/applications/openchamber-desktop.desktop
-    install -m 444 -D ${appimageContents}/openchamber.svg $out/share/icons/hicolor/scalable/apps/openchamber-desktop.svg
+    if [ -e ${appimageContents}/openchamber.svg ]; then
+      install -m 444 -D ${appimageContents}/openchamber.svg $out/share/icons/hicolor/scalable/apps/openchamber-desktop.svg
+    elif [ -e ${appimageContents}/openchamber.png ]; then
+      install -m 444 -D ${appimageContents}/openchamber.png $out/share/icons/hicolor/512x512/apps/openchamber-desktop.png
+    else
+      echo "missing application icon in AppImage contents" >&2
+      exit 1
+    fi
 
     substituteInPlace $out/share/applications/openchamber-desktop.desktop \
       --replace-fail 'Exec=AppRun' 'Exec=openchamber-desktop' \
