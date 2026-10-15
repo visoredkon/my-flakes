@@ -62,6 +62,14 @@ environment.systemPackages = with pkgs; [
 ];
 ```
 
+### Compatibility
+
+This overlay is built against `nixos-unstable` (see `flake.lock`). Use the same `nixpkgs` in your system as in the example above. Mixing with stable `nixos-26.05` risks ABI mismatch, e.g. `programs.rofi.plugins` from 26.05 combined with an unstable `rofi-unwrapped`.
+
+### Transitive substituters
+
+`nix-cachyos-kernel` declares `https://attic.xuyh0120.win/lantian` as an `extra-substituter`. Timeouts there are non-fatal warnings. If unreachable from your network, do not enable `accept-flake-config` for transitive inputs, or set `substituters` explicitly without that host.
+
 ## Layout
 
 ```

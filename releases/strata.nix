@@ -1,0 +1,4 @@
+{
+  sha256 = "e15095a201165132a88032df15ecbeab795a13d6cacc4ebb943e276c35ff492e";
+  version = "1.0.0";
+}

@@ -141,6 +141,11 @@
           baseUrl = "https://github.com/CachyOS/proton-cachyos";
           urlTemplate = "${baseUrl}/releases/download/{version}/proton-{version}-x86_64_v3.tar.xz";
         };
+        "strata" = rec {
+          baseUrl = "https://github.com/lgse/strata/releases/download";
+          binName = "strata";
+          urlTemplate = "${baseUrl}/v{version}/strata-{version}-x86_64-unknown-linux-gnu.tar.gz";
+        };
         "tinymist" = rec {
           baseUrl = "https://github.com/Myriad-Dreamin/tinymist/releases/download";
           binName = "tinymist";
@@ -213,7 +218,6 @@
         "kitty"
         "mako"
         "neovim-unwrapped"
-        "rofi"
         "slurp"
         "starship"
         "swappy"
@@ -278,6 +282,10 @@
           };
           hyprpolkitagent = pkgs.callPackage ./packages/hyprpolkitagent.nix {
             inherit (hyprPackages) hyprlang hyprutils;
+          };
+          rofi = pkgs.callPackage ./packages/rofi.nix {
+            inherit optimization;
+            rofi-unwrapped = null;
           };
           inherit (hyprPackages)
             aquamarine
