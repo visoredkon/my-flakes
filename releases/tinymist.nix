@@ -1,5 +1,5 @@
 {
-  completionsSha256 = "sha256-gdmu6d8i1Mr0vIkQV00+4WWzv0gpGJ0nMlmaF5ckkv4=";
-  sha256 = "2428932e8d8b593ebc1ac4eed41fb9d3584166e1044bbcdef740b7296c348295";
-  version = "0.15.8";
+  completionsSha256 = "sha256-fVzpG04TxadbNPEcfpK6GWsxv6vzhcm9DWYO+6nryuU=";
+  sha256 = "10df33ec0b6cb380b1354b55bd8a32fdc2f00fec281b7dc0a41086bd0038e0fc";
+  version = "0.15.10";
 }
