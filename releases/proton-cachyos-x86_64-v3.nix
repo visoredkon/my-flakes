@@ -1,4 +1,4 @@
 {
-  sha256 = "ba52a4f31a060ffca2b8e05fc00e51bc39e4c1501928eb5a9218b0fa07bfc8c7";
-  version = "cachyos-11.0-20261005-slr";
+  sha256 = "7bedcb21e14ec79fe9f26c57a52e6f72acc27086c84c64edc0307b3d0a14447a";
+  version = "cachyos-11.0-20261014-slr";
 }
