@@ -1,11 +1,19 @@
 {
+  aquamarine,
+  hyprgraphics,
   hyprlang,
+  hyprtoolkit,
   hyprutils,
   pkgs,
   ...
 }:
 
 pkgs.hyprpolkitagent.override {
-  hyprland-qt-support = pkgs.hyprland-qt-support.override { inherit hyprlang; };
-  inherit hyprutils;
+  inherit
+    aquamarine
+    hyprgraphics
+    hyprlang
+    hyprtoolkit
+    hyprutils
+    ;
 }

@@ -63,7 +63,7 @@ jobs:
 
   build-my-flakes:
     needs: update-my-flakes
-    if: needs.update-my-flakes.outputs.updated == 'true'
+    # if: needs.update-my-flakes.outputs.updated == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -160,7 +160,7 @@ jobs:
 
   build-kernel:
     needs: update-my-flakes
-    if: needs.update-my-flakes.outputs.updated == 'true'
+    # if: needs.update-my-flakes.outputs.updated == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 300
     permissions:

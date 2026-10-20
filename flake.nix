@@ -281,7 +281,13 @@
             inherit (optimizedPackages) libfprint;
           };
           hyprpolkitagent = pkgs.callPackage ./packages/hyprpolkitagent.nix {
-            inherit (hyprPackages) hyprlang hyprutils;
+            inherit (hyprPackages)
+              aquamarine
+              hyprgraphics
+              hyprlang
+              hyprtoolkit
+              hyprutils
+              ;
           };
           rofi = pkgs.callPackage ./packages/rofi.nix {
             inherit optimization;
