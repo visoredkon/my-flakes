@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.neovim-unwrapped.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withCMakeClangMold
+(optimization.llvmStdenv pkgs.neovim-unwrapped).overrideAttrs optimization.withCMakeClangMold

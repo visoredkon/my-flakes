@@ -4,16 +4,14 @@
 }:
 
 let
-  obs-studio = (pkgs.obs-studio.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs (
+  obs-studio = (optimization.llvmStdenv pkgs.obs-studio).overrideAttrs (
     old:
     let
       base = optimization.withCMakeClangMoldMode "none" old;
     in
     base
     // {
-      cmakeFlags =
-        builtins.filter (f: f != "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON") (base.cmakeFlags or [ ])
-        ++ [ "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF" ];
+      cmakeFlags = (base.cmakeFlags or [ ]) ++ [ "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF" ];
 
       postPatch = (old.postPatch or "") + ''
         substituteInPlace plugins/obs-nvenc/CMakeLists.txt \

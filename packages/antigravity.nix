@@ -4,13 +4,58 @@
   ...
 }:
 
-assert release ? sha256 && release.sha256 != "";
-assert release ? url && release.url != "";
-assert release ? version && release.version != "";
-
 let
   pname = "antigravity";
   inherit (release) version;
+
+  sharedLibraryNames = [
+    "alsa-lib"
+    "at-spi2-atk"
+    "atk"
+    "cairo"
+    "cups"
+    "dbus"
+    "expat"
+    "fontconfig"
+    "freetype"
+    "gdk-pixbuf"
+    "glib"
+    "gtk3"
+    "libdrm"
+    "libglvnd"
+    "libnotify"
+    "libpulseaudio"
+    "libuuid"
+    "libX11"
+    "libxcb"
+    "libXcomposite"
+    "libXcursor"
+    "libXdamage"
+    "libXext"
+    "libXfixes"
+    "libXi"
+    "libxkbcommon"
+    "libXrandr"
+    "libXrender"
+    "libXScrnSaver"
+    "libxshmfence"
+    "libXtst"
+    "mesa"
+    "nspr"
+    "nss"
+    "pango"
+    "systemd"
+  ];
+
+  fhsLibraryNames = [
+    "coreutils"
+    "gsettings-desktop-schemas"
+    "libGL"
+    "libGLU"
+    "xdg-utils"
+  ];
+
+  resolveLibraries = pkgs: names: map (name: pkgs.${name}) names;
 
   antigravity-desktop = pkgs.makeDesktopItem {
     name = pname;
@@ -39,44 +84,7 @@ let
     dontBuild = true;
     sourceRoot = "Antigravity-x64";
 
-    buildInputs = with pkgs; [
-      alsa-lib
-      at-spi2-atk
-      atk
-      cairo
-      cups
-      dbus
-      expat
-      fontconfig
-      freetype
-      gdk-pixbuf
-      glib
-      gtk3
-      libdrm
-      libglvnd
-      libnotify
-      libpulseaudio
-      libuuid
-      libX11
-      libxcb
-      libXcomposite
-      libXcursor
-      libXdamage
-      libXext
-      libXfixes
-      libXi
-      libxkbcommon
-      libXrandr
-      libXrender
-      libXScrnSaver
-      libxshmfence
-      libXtst
-      mesa
-      nspr
-      nss
-      pango
-      systemd
-    ];
+    buildInputs = resolveLibraries pkgs sharedLibraryNames;
 
     nativeBuildInputs = with pkgs; [
       asar
@@ -113,50 +121,10 @@ pkgs.buildFHSEnv {
   name = pname;
 
   targetPkgs =
-    pkgs: with pkgs; [
-      alsa-lib
-      antigravity-base
-      at-spi2-atk
-      atk
-      cairo
-      coreutils
-      cups
-      dbus
-      expat
-      fontconfig
-      freetype
-      gdk-pixbuf
-      glib
-      gsettings-desktop-schemas
-      gtk3
-      libdrm
-      libglvnd
-      libGL
-      libGLU
-      libnotify
-      libpulseaudio
-      libuuid
-      libX11
-      libxcb
-      libXcomposite
-      libXcursor
-      libXdamage
-      libXext
-      libXfixes
-      libXi
-      libxkbcommon
-      libXrandr
-      libXrender
-      libXScrnSaver
-      libxshmfence
-      libXtst
-      mesa
-      nspr
-      nss
-      pango
-      systemd
-      xdg-utils
-    ];
+    pkgs:
+    resolveLibraries pkgs sharedLibraryNames
+    ++ resolveLibraries pkgs fhsLibraryNames
+    ++ [ antigravity-base ];
 
   extraBwrapArgs = [
     "--tmpfs /opt/google/chrome"
@@ -180,6 +148,4 @@ pkgs.buildFHSEnv {
     done
     exec antigravity "$@"
   '';
-
-  meta = { };
 }

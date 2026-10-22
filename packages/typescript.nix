@@ -6,7 +6,11 @@
   ...
 }:
 
+let
+  mainBin = if lib.versionAtLeast release.version "7.1" then "tsc" else "tsgo";
+in
 optimization.withGoOptimizations {
+  goBuilder = pkgs.buildGo127Module;
   pname = "typescript";
   inherit (release) vendorHash version;
 
@@ -24,19 +28,20 @@ optimization.withGoOptimizations {
   ];
 
   subPackages = [
-    "cmd/tsgo"
+    "cmd/${mainBin}"
   ];
 
   nativeBuildInputs = [ pkgs.writableTmpDirAsHomeHook ];
 
   env.CGO_ENABLED = 0;
+  env.GOWORK = "off";
 
   postInstall = ''
     lib_dir="$out/lib/typescript"
     mkdir -p "$lib_dir"
     cp -r internal/bundled/libs/. "$lib_dir"
 
-    mv "$out/bin/tsgo" "$lib_dir/tsc"
+    mv "$out/bin/${mainBin}" "$lib_dir/tsc"
 
     ln -s "$lib_dir/tsc" "$out/bin/tsc"
     ln -s "$lib_dir/tsc" "$out/bin/tsgo"

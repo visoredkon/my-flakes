@@ -5,8 +5,5 @@
   ...
 }:
 
-(pkgs.fprintd.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-  inherit libfprint;
-}).overrideAttrs
+(optimization.llvmStdenvWithArgs { inherit libfprint; } pkgs.fprintd).overrideAttrs
   optimization.withMesonClangMold

@@ -6,10 +6,6 @@
   ...
 }:
 
-assert release ? rev && release.rev != "";
-assert release ? sourceSha256 && release.sourceSha256 != "";
-assert release ? vendorHash && release.vendorHash != "";
-
 optimization.withGoOptimizations {
   goBuilder = pkgs.buildGo127Module;
   pname = "elephant";

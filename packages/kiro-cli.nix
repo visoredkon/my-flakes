@@ -22,6 +22,10 @@ mkPrebuilt {
     unzip
   ];
 
+  unpackPhase = ''
+    unzip "$src"
+  '';
+
   installPhase = ''
     runHook preInstall
 
@@ -31,8 +35,5 @@ mkPrebuilt {
     ln -s "$out/bin/kiro-cli" "$out/bin/q"
 
     runHook postInstall
-  '';
-  unpackPhase = ''
-    unzip "$src"
   '';
 }

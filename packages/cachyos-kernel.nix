@@ -54,12 +54,18 @@ let
     "WLAN_VENDOR_ZYDAS"
   ];
 
-  tunedCachyosKernel = cachyosUpstream.linux-cachyos-latest-lto-x86_64-v3.override {
-    cpusched = "bore";
-    tickrate = "idle";
-    hugepage = "madvise";
-    structuredExtraConfig = pkgs.lib.genAttrs disabledKernelOptions (_: off);
-  };
+  tunedCachyosKernel =
+    (cachyosUpstream.linux-cachyos-latest-lto-x86_64-v3.override {
+      cpusched = "bore";
+      tickrate = "idle";
+      hugepage = "madvise";
+      structuredExtraConfig = pkgs.lib.genAttrs disabledKernelOptions (_: off);
+    }).overrideAttrs
+      (old: {
+        passthru = old.passthru // {
+          inherit disabledKernelOptions;
+        };
+      });
 
   tunedCachyosLinuxPackages =
     let

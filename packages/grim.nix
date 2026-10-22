@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.grim.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withMesonClangMold
+(optimization.llvmStdenv pkgs.grim).overrideAttrs optimization.withMesonClangMold

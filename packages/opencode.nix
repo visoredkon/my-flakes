@@ -21,7 +21,6 @@ mkPrebuilt {
     runHook preInstall
 
     install -Dm755 package/bin/opencode "$out/bin/opencode"
-    ln -s opencode "$out/bin/opencode2"
 
     runHook postInstall
   '';

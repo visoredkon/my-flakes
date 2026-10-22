@@ -28,7 +28,7 @@ mkPrebuilt {
     zstd
   ];
 
-  runtimeDependencies = with pkgs; [
+  propagateBuildInputs = with pkgs; [
     libglvnd
     libx11
     libxcb

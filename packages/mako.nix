@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.mako.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withMesonClangMold
+(optimization.llvmStdenv pkgs.mako).overrideAttrs optimization.withMesonClangMold

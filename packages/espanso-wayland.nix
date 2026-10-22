@@ -1,8 +1,9 @@
 {
+  optimization,
   pkgs,
-  securityWrapperPath ? null,
   wl-clipboard,
   ...
 }:
 
-pkgs.espanso-wayland.override { inherit securityWrapperPath wl-clipboard; }
+(optimization.llvmStdenvWithArgs { inherit wl-clipboard; } pkgs.espanso-wayland).overrideAttrs
+  optimization.withRustOptimizations

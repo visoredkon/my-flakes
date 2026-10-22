@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.wayvnc.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withMesonClangMold
+(optimization.llvmStdenv pkgs.wayvnc).overrideAttrs optimization.withMesonClangMold

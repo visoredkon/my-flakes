@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.wl-clipboard.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withMesonClangMold
+(optimization.llvmStdenv pkgs.wl-clipboard).overrideAttrs optimization.withMesonClangMold

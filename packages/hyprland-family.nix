@@ -36,18 +36,27 @@ let
 
   hyprwire = llvmOptimized thinLto "hyprwire" { inherit hyprutils; };
 
-  hyprland =
-    (pkgs.hyprland.override {
-      inherit
-        aquamarine
-        hyprcursor
-        hyprgraphics
-        hyprlang
-        hyprutils
-        libinput
-        ;
-    }).overrideAttrs
-      fullLto;
+  hyprland = llvmOptimized fullLto "hyprland" {
+    inherit
+      aquamarine
+      hyprcursor
+      hyprgraphics
+      hyprlang
+      hyprutils
+      hyprwire
+      ;
+    inherit (pkgs) libinput;
+  };
+
+  hyprpolkitagent = llvmOptimized fullLto "hyprpolkitagent" {
+    inherit
+      aquamarine
+      hyprgraphics
+      hyprlang
+      hyprtoolkit
+      hyprutils
+      ;
+  };
 
   hypridle = llvmOptimized thinLto "hypridle" { inherit hyprlang hyprutils; };
 
@@ -87,6 +96,7 @@ in
     hyprlang
     hyprlock
     hyprpaper
+    hyprpolkitagent
     hyprtoolkit
     hyprutils
     hyprwire

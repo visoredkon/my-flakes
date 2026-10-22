@@ -14,7 +14,7 @@ mkPrebuilt {
   sourceRoot = ".";
 
   buildInputs = with pkgs; [
-    gcc-unwrapped
+    gcc-unwrapped.lib
     zlib
   ];
   nativeBuildInputs = with pkgs; [

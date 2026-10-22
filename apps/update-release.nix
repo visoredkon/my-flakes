@@ -1,8 +1,8 @@
 {
   lib,
   packageMetadata,
-  goPackagesConfig ? { },
-  branchSourcesConfig ? { },
+  goPackagesConfig,
+  branchSourcesConfig,
   pkgs,
   ...
 }:
@@ -25,19 +25,18 @@ let
 in
 pkgs.writeShellApplication {
   name = "update-release";
-  runtimeInputs =
-    with pkgs;
-    [
-      coreutils
-      curl
-      gawk
-      git
-      gnupg
-      gnutar
-      jq
-      nix
-    ]
-    ++ lib.optionals (goPackagesConfig != { } || branchSourcesConfig != { }) [ gh ];
+  runtimeInputs = [
+    pkgs.coreutils
+    pkgs.curl
+    pkgs.gawk
+    pkgs.git
+    pkgs.gnupg
+    pkgs.gnutar
+    pkgs.jq
+    pkgs.nix
+    pkgs.nixfmt
+  ]
+  ++ lib.optionals (goPackagesConfig != { } || branchSourcesConfig != { }) [ pkgs.gh ];
   text = ''
     set -euo pipefail
 
@@ -429,6 +428,26 @@ pkgs.writeShellApplication {
 
       line="$line}"
       printf '%s\n' "$line" > "$release_file"
+      nixfmt "$release_file"
+    }
+
+    backup_release_file() {
+      local release_file="$1"
+      local backup
+      backup=$(mktemp)
+      if [[ -f "$release_file" ]]; then
+        cp "$release_file" "$backup"
+      fi
+      echo "$backup"
+    }
+
+    restore_release_file() {
+      local release_file="$1"
+      local backup="$2"
+      if [[ -s "$backup" ]]; then
+        cp "$backup" "$release_file"
+      fi
+      rm -f "$backup"
     }
 
     while [[ $# -gt 0 ]]; do
@@ -700,7 +719,11 @@ pkgs.writeShellApplication {
 
       echo "check go package $pkg ($repoOwner/$repoName)" >&2
 
-      current_tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '[.[] | select(.name | test("^v[0-9]"))][0]' || true)
+      current_tag=$(gh api "repos/$repoOwner/$repoName/tags" --jq '
+        [ .[] | select(.name | test("^v[0-9]+([.][0-9]+)*$")) ]
+        | sort_by(.name | ltrimstr("v") | split(".") | map(tonumber))
+        | .[-1] // {}
+      ' || true)
       tag=$(jq -r '.name // ""' <<<"$current_tag")
       version="''${tag#v}"
 
@@ -751,15 +774,20 @@ pkgs.writeShellApplication {
         return 1
       fi
 
+      release_backup=$(backup_release_file "$releaseFile")
+
       if ! write_release_file "$pkg" "$releaseFile"; then
         add_failure "$pkg" "failed to write $releaseFile"
+        restore_release_file "$releaseFile" "$release_backup"
         return 1
       fi
 
       if ! refresh_vendor_hash "$pkg" "$releaseFile"; then
+        restore_release_file "$releaseFile" "$release_backup"
         return 1
       fi
 
+      rm -f "$release_backup"
       record_update "$current_version" "$version"
     }
 
@@ -783,6 +811,7 @@ pkgs.writeShellApplication {
             return 1
           fi
         else
+          printf '%s\n' "$buildOutput" | tail -n 40 >&2
           add_failure "$pkg" "could not figure out vendorHash, set it by hand or run nix build .#$pkg"
           return 1
         fi
@@ -842,19 +871,24 @@ pkgs.writeShellApplication {
         return 1
       fi
 
+      release_backup=$(backup_release_file "$releaseFile")
+
       if ! write_release_file "$pkg" "$releaseFile"; then
         add_failure "$pkg" "failed to write $releaseFile"
+        restore_release_file "$releaseFile" "$release_backup"
         return 1
       fi
 
       case "$pkg" in
       elephant)
         if ! refresh_vendor_hash "$pkg" "$releaseFile"; then
+          restore_release_file "$releaseFile" "$release_backup"
           return 1
         fi
         ;;
       esac
 
+      rm -f "$release_backup"
       record_update "$current_rev" "$rev"
     }
 
@@ -964,7 +998,6 @@ pkgs.writeShellApplication {
       for failureIndex in "''${!failurePackages[@]}"; do
         status_line fail "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}"
       done
-      exit 1
     fi
 
     printf '\n' >&2
@@ -974,20 +1007,21 @@ pkgs.writeShellApplication {
       status_line detail "Warning: flake update failed, continuing with existing flake.lock"
     fi
 
-    if ! run_phase "format (nix fmt)" nix fmt; then
-      status_line detail "Warning: fmt failed, continuing with unformatted files"
-    fi
-
-    run_phase "lint checks" nix build --no-link \
+    if ! run_phase "lint checks" nix build --no-link \
       ".#checks.x86_64-linux.embedded-lint" \
       ".#checks.x86_64-linux.format" \
       ".#checks.x86_64-linux.linter" \
-      ".#checks.x86_64-linux.yamllint"
+      ".#checks.x86_64-linux.yamllint"; then
+      status_line detail "Warning: lint checks failed"
+    fi
 
     if [[ "$COMMIT" == "true" ]]; then
       echo "" >&2
-      echo "stage releases, formatted files, and flake.lock for commit" >&2
-      git add flake.lock flake.nix apps/ packages/ releases/
+      echo "stage the release files this run rewrote, plus flake.lock" >&2
+      git add flake.lock
+      for update in "''${updates[@]}"; do
+        git add "releases/''${update%%:*}.nix"
+      done
 
       if git diff --cached --quiet; then
         echo "nothing to commit" >&2
@@ -1017,6 +1051,14 @@ pkgs.writeShellApplication {
               echo "- $pkg: $from_version -> $to_version"
             done
           fi
+
+          if (( ''${#failurePackages[@]} > 0 )); then
+            echo
+            echo "failed:"
+            for failureIndex in "''${!failurePackages[@]}"; do
+              echo "- ''${failurePackages[$failureIndex]}: ''${failureMessages[$failureIndex]}"
+            done
+          fi
         } > "$commit_message_file"
 
         git commit -F "$commit_message_file"
@@ -1032,5 +1074,9 @@ pkgs.writeShellApplication {
     printf '\n' >&2
     total_elapsed=$((SECONDS - start_seconds))
     status_line header "done in ''${total_elapsed}s"
+
+    if (( ''${#failurePackages[@]} > 0 )); then
+      exit 1
+    fi
   '';
 }

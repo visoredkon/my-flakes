@@ -3,5 +3,4 @@
   pkgs,
 }:
 
-(pkgs.fd.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs
-  optimization.withRustOptimizations
+(optimization.llvmStdenv pkgs.fd).overrideAttrs optimization.withRustOptimizations

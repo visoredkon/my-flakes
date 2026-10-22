@@ -6,8 +6,6 @@
   ...
 }:
 
-assert release ? sourceSha256 && release.sourceSha256 != "";
-
 let
   completionsArchive = pkgs.fetchurl {
     sha256 = release.sourceSha256;
@@ -18,6 +16,17 @@ in
 mkPrebuilt {
   pname = "mise";
   inherit release urlTemplate;
+
+  completions = {
+    archive = completionsArchive;
+    stripComponents = 2;
+    prefix = "mise-${release.version}/completions/";
+    files = {
+      bash = "mise.bash";
+      fish = "mise.fish";
+      zsh = "_mise";
+    };
+  };
 
   dontBuild = true;
   sourceRoot = ".";
@@ -39,13 +48,6 @@ mkPrebuilt {
   '';
 
   postFixup = ''
-    mkdir -p completions
-
-    tar --extract --file "${completionsArchive}" --directory completions --strip-components=2 \
-      "mise-${release.version}/completions/_mise" \
-      "mise-${release.version}/completions/mise.bash" \
-      "mise-${release.version}/completions/mise.fish"
-
     substituteInPlace completions/{mise.bash,mise.fish} \
       --replace-quiet "type -P usage" "type -P ${usageBin}"
 
@@ -54,10 +56,5 @@ mkPrebuilt {
 
     substituteInPlace completions/{_mise,mise.bash,mise.fish} \
       --replace-quiet "usage complete-word" "${usageBin} complete-word"
-
-    installShellCompletion \
-      --bash completions/mise.bash \
-      --fish completions/mise.fish \
-      --zsh completions/_mise
   '';
 }

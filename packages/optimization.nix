@@ -1,4 +1,4 @@
-{ pkgs }:
+{ lib, pkgs }:
 
 let
   moldEnv = old: {
@@ -10,13 +10,20 @@ let
   };
 
   ltoFlagFor =
-    ltoMode:
-    if ltoMode == "full" then
-      " -flto"
+    ltoMode: stdenv:
+    let
+      isClang = stdenv.cc.isClang or false;
+    in
+    if ltoMode == "none" then
+      ""
     else if ltoMode == "thin" then
-      " -flto=thin"
+      if isClang then " -flto=thin" else " -flto"
+    else if isClang then
+      " -flto=full"
     else
-      "";
+      " -flto";
+
+  mesonLtoModeFor = ltoMode: if ltoMode == "thin" then "thin" else "default";
 
   cgoDisabled =
     attrs:
@@ -30,14 +37,14 @@ let
     ltoMode: old:
     let
       base = moldEnv old;
-      ltoFlag = ltoFlagFor ltoMode;
+      ltoFlag = ltoFlagFor ltoMode (old.stdenv or pkgs.stdenv);
     in
     base
     // {
       doCheck = false;
-      cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
-      ];
+      cmakeFlags =
+        (old.cmakeFlags or [ ])
+        ++ lib.optional (ltoMode != "none") "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON";
       env = base.env // {
         NIX_CFLAGS_COMPILE = base.env.NIX_CFLAGS_COMPILE + ltoFlag;
         NIX_CFLAGS_LINK = base.env.NIX_CFLAGS_LINK + ltoFlag;
@@ -46,15 +53,25 @@ let
 
   withMesonClangMoldMode =
     ltoMode: old:
-    (moldEnv old)
+    let
+      base = moldEnv old;
+      ltoFlag = ltoFlagFor ltoMode (old.stdenv or pkgs.stdenv);
+    in
+    base
     // {
       doCheck = false;
-      mesonFlags = (old.mesonFlags or [ ]) ++ [
-        "-Db_lto=true"
-        "-Db_lto_mode=${ltoMode}"
-        "-Db_ndebug=true"
-        "-Dstrip=true"
-      ];
+      mesonFlags =
+        (old.mesonFlags or [ ])
+        ++ lib.optional (ltoMode != "none") "-Db_lto=true"
+        ++ lib.optional (ltoMode != "none") "-Db_lto_mode=${mesonLtoModeFor ltoMode}"
+        ++ [
+          "-Db_ndebug=true"
+          "-Dstrip=true"
+        ];
+      env = base.env // {
+        NIX_CFLAGS_COMPILE = base.env.NIX_CFLAGS_COMPILE + ltoFlag;
+        NIX_CFLAGS_LINK = base.env.NIX_CFLAGS_LINK + ltoFlag;
+      };
     };
 
   withGoFlags =
@@ -78,6 +95,11 @@ in
 
   withCMakeClangMold = withCMakeClangMoldMode "full";
 
+  llvmStdenv = pkg: pkg.override { stdenv = pkgs.llvmPackages.stdenv; };
+
+  llvmStdenvWithArgs =
+    extraArgs: pkg: pkg.override (extraArgs // { stdenv = pkgs.llvmPackages.stdenv; });
+
   withGoOverride = old: withGoFlags (if cgoDisabled old then old else moldEnv old) old;
 
   withGoOptimizations =
@@ -96,7 +118,7 @@ in
     in
     go (withGoFlags (b // base) b);
 
-  withMesonClangMold = withMesonClangMoldMode "default";
+  withMesonClangMold = withMesonClangMoldMode "full";
 
   withRustOptimizations =
     old:

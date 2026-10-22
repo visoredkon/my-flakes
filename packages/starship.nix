@@ -3,5 +3,4 @@
   pkgs,
 }:
 
-(pkgs.starship.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs
-  optimization.withRustOptimizations
+(optimization.llvmStdenv pkgs.starship).overrideAttrs optimization.withRustOptimizations

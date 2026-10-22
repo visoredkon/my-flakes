@@ -27,12 +27,13 @@
     }:
     let
       system = "x86_64-linux";
+      inherit (nixpkgs) lib;
 
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfreePredicate =
           pkg:
-          builtins.elem (nixpkgs.lib.getName pkg) [
+          builtins.elem (lib.getName pkg) [
             "antigravity"
             "antigravity-cli"
             "kiro"
@@ -45,11 +46,19 @@
       optimization = pkgs.callPackage ./packages/optimization.nix { };
 
       disabledPackages = [
+        "antigravity-cli"
+        "antigravity"
         "claude-code"
+        "bootdev"
+        "codebase-memory-mcp"
+        "copilot-cli"
         "kiro"
         "kiro-cli"
+        "libfprint"
         "warp-terminal"
       ];
+
+      enabledNames = names: builtins.filter (name: !(builtins.elem name disabledPackages)) names;
 
       packagesConfig = {
         "antigravity" = {
@@ -187,14 +196,22 @@
         };
       };
 
-      goPackageNames = builtins.attrNames goPackagesConfig;
+      activeGoPackagesConfig = removeAttrs goPackagesConfig disabledPackages;
 
-      goPackageReleases = builtins.listToAttrs (
-        map (name: {
-          inherit name;
-          value = import ./releases/${name}.nix;
-        }) goPackageNames
-      );
+      goPackageNames = builtins.attrNames activeGoPackagesConfig;
+
+      loadRelease = name: import ./releases/${name}.nix;
+
+      loadReleases =
+        names:
+        builtins.listToAttrs (
+          map (name: {
+            inherit name;
+            value = loadRelease name;
+          }) names
+        );
+
+      goPackageReleases = loadReleases goPackageNames;
 
       goPackages = builtins.listToAttrs (
         map (name: {
@@ -209,7 +226,9 @@
       optimizedPlainNames = [
         "bat"
         "btop"
+        "cliphist"
         "delta"
+        "easyeffects"
         "eza"
         "fastfetch"
         "fd"
@@ -234,12 +253,7 @@
         "waybar"
       ];
 
-      optimizedReleases = builtins.listToAttrs (
-        map (name: {
-          inherit name;
-          value = import ./releases/${name}.nix;
-        }) optimizedReleaseNames
-      );
+      optimizedReleases = loadReleases optimizedReleaseNames;
 
       obsPluginNames = [
         "obs-pipewire-audio-capture"
@@ -251,13 +265,13 @@
       hyprPackages = pkgs.callPackage ./packages/hyprland-family.nix {
         inherit optimization;
         inherit (pkgs) libinput;
-        inherit (optimizedPackages)
+        inherit (optimizedPackagesAll)
           grim
           slurp
           ;
       };
 
-      optimizedPackages =
+      optimizedPackagesAll =
         builtins.listToAttrs (
           map (name: {
             inherit name;
@@ -271,28 +285,15 @@
           }
         ) optimizedReleases
         // {
-          cliphist = pkgs.callPackage ./packages/cliphist.nix { inherit optimization; };
-          easyeffects = pkgs.callPackage ./packages/easyeffects.nix { inherit optimization; };
           espanso-wayland = pkgs.callPackage ./packages/espanso-wayland.nix {
-            inherit (optimizedPackages) wl-clipboard;
+            inherit optimization;
+            inherit (optimizedPackagesAll) wl-clipboard;
           };
           fprintd = pkgs.callPackage ./packages/fprintd.nix {
             inherit optimization;
-            inherit (optimizedPackages) libfprint;
+            inherit (optimizedPackagesAll) libfprint;
           };
-          hyprpolkitagent = pkgs.callPackage ./packages/hyprpolkitagent.nix {
-            inherit (hyprPackages)
-              aquamarine
-              hyprgraphics
-              hyprlang
-              hyprtoolkit
-              hyprutils
-              ;
-          };
-          rofi = pkgs.callPackage ./packages/rofi.nix {
-            inherit optimization;
-            rofi-unwrapped = null;
-          };
+          rofi = pkgs.callPackage ./packages/rofi.nix { inherit optimization; };
           inherit (hyprPackages)
             aquamarine
             hyprcursor
@@ -302,6 +303,7 @@
             hyprlang
             hyprlock
             hyprpaper
+            hyprpolkitagent
             hyprtoolkit
             hyprutils
             hyprwire
@@ -314,11 +316,13 @@
             ;
         };
 
+      optimizedPackages = removeAttrs optimizedPackagesAll disabledPackages;
+
       packageMetadata = builtins.mapAttrs (
         name: info:
         info
         // {
-          release = import ./releases/${name}.nix;
+          release = loadRelease name;
         }
       ) activePackagesConfig;
 
@@ -360,10 +364,12 @@
         };
       };
 
+      activeBranchSourcesConfig = removeAttrs branchSourcesConfig disabledPackages;
+
       updateRelease = pkgs.callPackage ./apps/update-release.nix {
         inherit packageMetadata;
-        inherit goPackagesConfig;
-        inherit branchSourcesConfig;
+        goPackagesConfig = activeGoPackagesConfig;
+        branchSourcesConfig = activeBranchSourcesConfig;
       };
 
       cachyos = pkgs.callPackage ./packages/cachyos-kernel.nix {
@@ -374,15 +380,16 @@
 
     in
     {
-      apps.${system} =
+      apps.${system} = removeAttrs (
         (builtins.mapAttrs (name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}") (
-          nixpkgs.lib.filterAttrs (_: meta: meta ? binName) packageMetadata
+          lib.filterAttrs (_: meta: meta ? binName) packageMetadata
         ))
         // {
           "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
           "typescript" = mkApp "${generatedPackages.typescript}/bin/tsc";
           "update-release" = mkApp "${updateRelease}/bin/update-release";
-        };
+        }
+      ) disabledPackages;
 
       checks.${system} =
         (builtins.mapAttrs (
@@ -534,12 +541,16 @@
           linter =
             pkgs.runCommand "check-linter"
               {
-                nativeBuildInputs = [ pkgs.statix ];
+                nativeBuildInputs = [
+                  pkgs.deadnix
+                  pkgs.statix
+                ];
                 src = self;
               }
               ''
                 cd $src
                 statix check .
+                deadnix --fail .
                 touch $out
               '';
           yamllint =
@@ -571,7 +582,7 @@
                   grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$config"
                   ! grep -q '^CONFIG_RUST=y' "$config"
                 ''
-                + pkgs.lib.concatMapStringsSep "\n" (
+                + lib.concatMapStringsSep "\n" (
                   name: "! grep -q '^CONFIG_${name}=[ym]' \"$config\""
                 ) disabledKernelOptions
                 + "\ntouch $out\n"
@@ -585,29 +596,24 @@
         builtins.intersectAttrs (activePackagesConfig // optimizedPackages) (
           self.packages.${prev.stdenv.hostPlatform.system} or { }
         )
-        // nixpkgs.lib.genAttrs goPackageNames (
-          name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
-        )
+        // lib.genAttrs goPackageNames (name: self.packages.${prev.stdenv.hostPlatform.system}.${name})
         // cachyosPackages
         // {
           obs-studio-plugins =
             prev.obs-studio-plugins
-            // nixpkgs.lib.genAttrs obsPluginNames (
+            // lib.genAttrs (enabledNames obsPluginNames) (
               name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
             );
         };
 
-      packages.${system} =
+      packages.${system} = removeAttrs (
         generatedPackages
         // optimizedPackages
         // {
           inherit (cachyosPackages) linux_cachyos_latest_lto_x86_64_v3;
-        };
+        }
+      ) disabledPackages;
 
       legacyPackages.${system} = cachyosPackages;
-
-      kernelTuning = {
-        inherit disabledKernelOptions;
-      };
     };
 }

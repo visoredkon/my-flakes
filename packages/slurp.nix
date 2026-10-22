@@ -3,7 +3,4 @@
   pkgs,
 }:
 
-(pkgs.slurp.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withMesonClangMold
+(optimization.llvmStdenv pkgs.slurp).overrideAttrs optimization.withMesonClangMold

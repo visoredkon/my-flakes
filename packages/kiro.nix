@@ -5,10 +5,6 @@
   ...
 }:
 
-assert release ? sha256 && release.sha256 != "";
-assert release ? version && release.version != "";
-assert release ? vscodeVersion && release.vscodeVersion != "";
-
 let
   base = pkgs.buildVscode {
     executableName = "kiro";

@@ -6,9 +6,6 @@
   ...
 }:
 
-assert release ? sha256 && release.sha256 != "";
-assert release ? version && release.version != "";
-
 let
   pname = "openchamber-desktop";
   inherit (release) version;

@@ -1,9 +1,9 @@
 {
   optimization,
   pkgs,
+  ...
 }:
 
-(pkgs.fastfetch.override {
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
-  optimization.withCMakeClangMold
+pkgs.fastfetch.override {
+  fastfetch-unwrapped = pkgs.fastfetch-unwrapped.overrideAttrs optimization.withCMakeClangMold;
+}

@@ -6,7 +6,9 @@
 
 pkgs.writeShellApplication {
   name = "fmt";
-  runtimeInputs = with pkgs; [ nixfmt ];
+  runtimeInputs = with pkgs; [
+    nixfmt
+  ];
   text = ''
     set -euo pipefail
 

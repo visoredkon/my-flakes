@@ -11,6 +11,7 @@ mkPrebuilt {
   inherit release urlTemplate;
 
   dontBuild = true;
+  sourceRoot = "typst-x86_64-unknown-linux-musl";
 
   nativeBuildInputs = with pkgs; [
     installShellFiles
@@ -29,6 +30,4 @@ mkPrebuilt {
       installShellCompletion --cmd typst --"$shell" <("$out/bin/typst" completions "$shell")
     done
   '';
-
-  sourceRoot = "typst-x86_64-unknown-linux-musl";
 }

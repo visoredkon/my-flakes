@@ -3,5 +3,4 @@
   pkgs,
 }:
 
-(pkgs.delta.override { stdenv = pkgs.llvmPackages.stdenv; }).overrideAttrs
-  optimization.withRustOptimizations
+(optimization.llvmStdenv pkgs.delta).overrideAttrs optimization.withRustOptimizations

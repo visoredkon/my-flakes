@@ -5,11 +5,11 @@
 {
   release,
   urlTemplate,
-  variant ? null,
+  variant,
 }:
 let
-  packageName = "proton-cachyos${lib.optionalString (variant != null) "-${variant}"}";
-  displayName = "Proton CachyOS${lib.optionalString (variant != null) " ${variant}"}";
+  packageName = "proton-cachyos-${variant}";
+  displayName = "Proton CachyOS ${variant}";
 in
 pkgs.stdenvNoCC.mkDerivation {
   pname = packageName;

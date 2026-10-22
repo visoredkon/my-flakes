@@ -4,10 +4,6 @@
   ...
 }:
 
-assert release ? sha256 && release.sha256 != "";
-assert release ? url && release.url != "";
-assert release ? version && release.version != "";
-
 pkgs.stdenvNoCC.mkDerivation {
   pname = "antigravity-cli";
   inherit (release) version;
@@ -19,7 +15,7 @@ pkgs.stdenvNoCC.mkDerivation {
   sourceRoot = ".";
 
   buildInputs = with pkgs; [
-    stdenv.cc.cc.lib
+    gcc-unwrapped.lib
   ];
   nativeBuildInputs = with pkgs; [
     autoPatchelfHook

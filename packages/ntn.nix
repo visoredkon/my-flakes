@@ -1,6 +1,5 @@
 {
   mkPrebuilt,
-  pkgs,
   release,
   urlTemplate,
   ...

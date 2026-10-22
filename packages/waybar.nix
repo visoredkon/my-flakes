@@ -5,14 +5,10 @@
   ...
 }:
 
-assert release ? rev && release.rev != "";
-assert release ? sourceSha256 && release.sourceSha256 != "";
-
-(pkgs.waybar.override {
+(optimization.llvmStdenvWithArgs {
   cavaSupport = false;
   gpsSupport = false;
-  stdenv = pkgs.llvmPackages.stdenv;
-}).overrideAttrs
+} pkgs.waybar).overrideAttrs
   (
     old:
     let

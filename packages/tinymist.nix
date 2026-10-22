@@ -6,8 +6,6 @@
   ...
 }:
 
-assert release ? completionsSha256 && release.completionsSha256 != "";
-
 let
   completionsArchive = pkgs.fetchurl {
     sha256 = release.completionsSha256;
@@ -17,6 +15,17 @@ in
 mkPrebuilt {
   pname = "tinymist";
   inherit release urlTemplate;
+
+  completions = {
+    archive = completionsArchive;
+    stripComponents = 1;
+    prefix = "completions/";
+    files = {
+      bash = "bash/tinymist";
+      fish = "fish/vendor_completions.d/tinymist.fish";
+      zsh = "zsh/_tinymist";
+    };
+  };
 
   dontBuild = true;
   sourceRoot = "tinymist-x86_64-unknown-linux-gnu";
@@ -36,19 +45,5 @@ mkPrebuilt {
     install -Dm755 tinymist "$out/bin/tinymist"
 
     runHook postInstall
-  '';
-
-  postFixup = ''
-    mkdir -p completions
-
-    tar --extract --file "${completionsArchive}" --directory completions --strip-components=1 \
-      "completions/bash/tinymist" \
-      "completions/fish/vendor_completions.d/tinymist.fish" \
-      "completions/zsh/_tinymist"
-
-    installShellCompletion \
-      --bash completions/bash/tinymist \
-      --fish completions/fish/vendor_completions.d/tinymist.fish \
-      --zsh completions/zsh/_tinymist
   '';
 }

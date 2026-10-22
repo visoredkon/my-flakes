@@ -74,6 +74,7 @@ jobs:
       contents: read
     env:
       GH_TOKEN: ${{ github.token }}
+      PKGS: ${{ needs.update-my-flakes.outputs.pkgs }}
       USER: runner
     steps:
       - name: checkout
@@ -112,7 +113,7 @@ jobs:
             return 1
           }
           i=0
-          IFS=' ' read -ra all_pkgs <<< "${{ needs.update-my-flakes.outputs.pkgs }}"
+          IFS=' ' read -ra all_pkgs <<< "$PKGS"
           for pkg in "${all_pkgs[@]}"; do
             case "$pkg" in
             linux*) ;;
@@ -167,6 +168,7 @@ jobs:
       contents: read
     env:
       GH_TOKEN: ${{ github.token }}
+      PKGS: ${{ needs.update-my-flakes.outputs.pkgs }}
       USER: runner
     steps:
       - name: checkout
@@ -183,7 +185,7 @@ jobs:
         run: |
           failed=0
           built=0
-          IFS=' ' read -ra all_pkgs <<< "${{ needs.update-my-flakes.outputs.pkgs }}"
+          IFS=' ' read -ra all_pkgs <<< "$PKGS"
           for pkg in "${all_pkgs[@]}"; do
             case "$pkg" in
             linux*)
@@ -211,7 +213,7 @@ jobs:
                 continue
               fi
               mapfile -t names < <(nix eval --raw \
-                '.#kernelTuning.disabledKernelOptions' \
+                '.#packages.x86_64-linux.linux_cachyos_latest_lto_x86_64_v3.passthru.disabledKernelOptions' \
                 --apply 'builtins.concatStringsSep "\n"' --accept-flake-config)
               for name in "${names[@]}"; do
                 if grep -q "unused option: ${name}$" "$log"; then

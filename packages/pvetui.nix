@@ -5,11 +5,6 @@
   ...
 }:
 
-assert release ? rev && release.rev != "";
-assert release ? sourceSha256 && release.sourceSha256 != "";
-assert release ? vendorHash && release.vendorHash != "";
-assert release ? version && release.version != "";
-
 optimization.withGoOptimizations {
   pname = "pvetui";
   inherit (release) vendorHash version;

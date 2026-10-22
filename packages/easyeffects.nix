@@ -3,4 +3,4 @@
   pkgs,
 }:
 
-pkgs.easyeffects.overrideAttrs optimization.withMesonClangMold
+pkgs.easyeffects.overrideAttrs optimization.withCMakeClangMold
