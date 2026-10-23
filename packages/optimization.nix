@@ -37,14 +37,22 @@ let
     ltoMode: old:
     let
       base = moldEnv old;
-      ltoFlag = ltoFlagFor ltoMode (old.stdenv or pkgs.stdenv);
+      stdenv = old.stdenv or pkgs.stdenv;
+      ltoFlag = ltoFlagFor ltoMode stdenv;
+      isClang = stdenv.cc.isClang or false;
     in
     base
     // {
       doCheck = false;
       cmakeFlags =
         (old.cmakeFlags or [ ])
-        ++ lib.optional (ltoMode != "none") "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON";
+        ++ lib.optional (ltoMode != "none") "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
+        ++ lib.optional (ltoMode != "none" && isClang) "-DCMAKE_AR=${pkgs.llvmPackages.bintools}/bin/ar"
+        ++ lib.optional (
+          ltoMode != "none" && isClang
+        ) "-DCMAKE_RANLIB=${pkgs.llvmPackages.bintools}/bin/ranlib";
+      nativeBuildInputs =
+        base.nativeBuildInputs ++ lib.optional (ltoMode != "none" && isClang) pkgs.llvmPackages.bintools;
       env = base.env // {
         NIX_CFLAGS_COMPILE = base.env.NIX_CFLAGS_COMPILE + ltoFlag;
         NIX_CFLAGS_LINK = base.env.NIX_CFLAGS_LINK + ltoFlag;

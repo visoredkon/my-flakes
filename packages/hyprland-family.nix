@@ -10,6 +10,7 @@ let
   llvmStdenv = pkgs.llvmPackages.stdenv;
   fullLto = optimization.withCMakeClangMold;
   thinLto = optimization.withCMakeClangMoldMode "thin";
+  noneLto = optimization.withCMakeClangMoldMode "none";
 
   llvmOptimized =
     optimizer: name: deps:
@@ -36,7 +37,7 @@ let
 
   hyprwire = llvmOptimized thinLto "hyprwire" { inherit hyprutils; };
 
-  hyprland = llvmOptimized fullLto "hyprland" {
+  hyprland = llvmOptimized noneLto "hyprland" {
     inherit
       aquamarine
       hyprcursor

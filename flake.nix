@@ -604,6 +604,13 @@
             // lib.genAttrs (enabledNames obsPluginNames) (
               name: self.packages.${prev.stdenv.hostPlatform.system}.${name}
             );
+          python314Packages =
+            prev.python314Packages
+            // {
+              pyrate-limiter = prev.python314Packages.pyrate-limiter.overrideAttrs (_: {
+                doCheck = false;
+              });
+            };
         };
 
       packages.${system} = removeAttrs (
