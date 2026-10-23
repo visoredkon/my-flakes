@@ -193,11 +193,6 @@ jobs:
               build_target=".#packages.x86_64-linux.$pkg"
               out=$(nix eval --raw "$build_target.outPath" \
                 --accept-flake-config)
-              if nix path-info --store "https://visoredkon.cachix.org" "$out" \
-                >/dev/null 2>&1; then
-                echo "cache hit for $pkg, skipping build"
-                continue
-              fi
               pkg_failed=0
               log="config-${pkg}.log"
               if ! nix build "$build_target.configfile" \
