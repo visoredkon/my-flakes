@@ -31,11 +31,7 @@ mkPrebuilt {
   dontBuild = true;
   sourceRoot = ".";
 
-  buildInputs = with pkgs; [
-    gcc-unwrapped.lib
-  ];
   nativeBuildInputs = with pkgs; [
-    autoPatchelfHook
     installShellFiles
   ];
 

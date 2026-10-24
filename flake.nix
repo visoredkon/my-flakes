@@ -609,6 +609,34 @@
               doCheck = false;
             });
           };
+          aggregateModules =
+            modules:
+            (prev.aggregateModules modules).overrideAttrs (old: {
+              postBuild =
+                let
+                  upstreamCertMerge = lib.concatStringsSep "\n" [
+                    "cp --no-preserve=mode,ownership --remove-destination \\"
+                    "      -- \"$(readlink -f modules.cer)\" modules.cer"
+                    "    sed \"1,$(wc -l < modules.order)d; s/\\.ko.*/.ko.cer/\" modules.dep \\"
+                    "        | xargs -d'\\n' cat >> modules.cer"
+                  ];
+                  conditionalCertMerge = lib.concatStringsSep "\n" [
+                    "if test -e \"$(readlink -f modules.cer 2>/dev/null)\"; then"
+                    "  cp --no-preserve=mode,ownership --remove-destination \\"
+                    "    -- \"$(readlink -f modules.cer)\" modules.cer"
+                    "  sed \"1,$(wc -l < modules.order)d; s/\\.ko.*/.ko.cer/\" modules.dep \\"
+                    "      | while IFS= read -r cer; do test -f \"$cer\" && cat \"$cer\" >> modules.cer || true; done"
+                    "fi"
+                  ];
+                  patchedPostBuild =
+                    builtins.replaceStrings [ upstreamCertMerge ] [ conditionalCertMerge ]
+                      old.postBuild;
+                in
+                if patchedPostBuild == old.postBuild then
+                  throw "aggregateModules cert-merge block not found; update or remove this workaround (xddxdd/nix-cachyos-kernel#111)"
+                else
+                  patchedPostBuild;
+            });
         };
 
       packages.${system} = removeAttrs (
