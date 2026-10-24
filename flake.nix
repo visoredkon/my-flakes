@@ -38,6 +38,7 @@
             "antigravity-cli"
             "kiro"
             "warp-terminal"
+            "zcode"
           ];
       };
 
@@ -174,6 +175,11 @@
           baseUrl = "https://releases.warp.dev/stable";
           binName = "warp-terminal";
           urlTemplate = "${baseUrl}/v{version}/warp-terminal-v{version}-1-x86_64.pkg.tar.zst";
+        };
+        "zcode" = rec {
+          baseUrl = "https://cdn-zcode.z.ai/zcode/electron/releases";
+          binName = "zcode";
+          urlTemplate = "${baseUrl}/{version}/linux-x64/ZCode-{version}-linux-x64.AppImage";
         };
       };
 

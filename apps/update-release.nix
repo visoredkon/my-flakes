@@ -614,6 +614,10 @@ pkgs.writeShellApplication {
         npmTag=$(jq -r --arg pkg "$pkg" '.[$pkg].npmTag // "latest"' <<<"$meta")
         metadata=$(curl_retry -fsSL "$baseUrl" || true)
         version=$(jq -r --arg tag "$npmTag" '.["dist-tags"][$tag] // ""' <<<"$metadata")
+      elif [[ "$baseUrl" == *"cdn-zcode.z.ai"* ]]; then
+        version=$(
+          curl_retry -fsSL 'https://zcode.z.ai/en' | gawk 'match($0, /releases\/[0-9]+\.[0-9]+\.[0-9]+\//) { print substr($0, RSTART + 9, RLENGTH - 10) }' | sort -uV | tail -1
+        )
       else
         add_failure "$pkg" "automatic version discovery not supported"
         return 1
