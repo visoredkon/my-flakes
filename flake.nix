@@ -151,6 +151,16 @@
           baseUrl = "https://github.com/CachyOS/proton-cachyos";
           urlTemplate = "${baseUrl}/releases/download/{version}/proton-{version}-x86_64_v3.tar.xz";
         };
+        "sonora" = rec {
+          baseUrl = "https://github.com/sonorahq/sonora/releases/download";
+          binName = "sonora";
+          releaseFields = [
+            "sha256"
+            "sourceSha256"
+            "version"
+          ];
+          urlTemplate = "${baseUrl}/v{version}/sonora-v{version}-x86_64-unknown-linux-gnu";
+        };
         "strata" = rec {
           baseUrl = "https://github.com/lgse/strata/releases/download";
           binName = "strata";

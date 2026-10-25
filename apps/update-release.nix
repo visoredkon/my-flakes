@@ -292,6 +292,17 @@ pkgs.writeShellApplication {
       echo "$sha"
     }
 
+    source_archive_url() {
+      case "$1" in
+      mise)
+        echo "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz"
+        ;;
+      sonora)
+        echo "https://github.com/sonorahq/sonora/archive/refs/tags/v$version.tar.gz"
+        ;;
+      esac
+    }
+
     release_field_value() {
       local release_file="$1"
       local field="$2"
@@ -672,8 +683,10 @@ pkgs.writeShellApplication {
         vscodeVersion=$(tar -Oxzf "$tmp" "$vscodeProductPath" | jq -r '.vsCodeVersion // ""' || true)
       fi
 
-      if [[ "$pkg" == "mise" ]]; then
-        sourceSha=$(download_source_sha256 "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz") || true
+      sourceSha=""
+      sourceArchiveUrl=$(source_archive_url "$pkg")
+      if [[ -n "$sourceArchiveUrl" ]]; then
+        sourceSha=$(download_source_sha256 "$sourceArchiveUrl") || true
         sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
         if [[ -z "$sourceSha" ]]; then
           add_failure "$pkg" "failed to determine sourceSha256"

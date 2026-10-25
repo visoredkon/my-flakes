@@ -72,7 +72,7 @@ let
       cachyosHelpers = pkgs.callPackage "${nix-cachyos-kernel}/helpers.nix" { };
       packages = pkgs.linuxKernel.packagesFor tunedCachyosKernel;
       packagesWithoutDepmodMetadata = packages.extend (
-        self: super: {
+        _self: super: {
           v4l2loopback = super.v4l2loopback.overrideAttrs (old: {
             postInstall = (old.postInstall or "") + ''
               rm -f $out/lib/modules/*/modules.*
