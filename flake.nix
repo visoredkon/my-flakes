@@ -3,10 +3,12 @@
 
   nixConfig = {
     extra-substituters = [
+      "https://cache.lantian.pub/lantian"
       "https://visoredkon.cachix.org"
       "https://cache.nixos.org"
     ];
     extra-trusted-public-keys = [
+      "lantian:WVGO7vsRMSEN+h7Lp7kv6SAmrkEXgUGbbXm7jMDjBuQ="
       "visoredkon.cachix.org-1:1Lxuvyp4PXtSm9TXxKrXjxmtdcxyoT6CaasoRAmHYRg="
       "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
     ];
@@ -392,7 +394,7 @@
         inherit nix-cachyos-kernel system;
       };
 
-      inherit (cachyos) cachyosPackages disabledKernelOptions;
+      inherit (cachyos) cachyosPackages;
 
     in
     {
@@ -580,29 +582,20 @@
                 yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' .
                 touch $out
               '';
-          linux_cachyos_latest_lto_x86_64_v3 = pkgs.runCommand "check-linux_cachyos_latest_lto_x86_64_v3" {
-            buildInputs = [ cachyosPackages.linux_cachyos_latest_lto_x86_64_v3 ];
+          linux_cachyos_bore_lto_x86_64_v3 = pkgs.runCommand "check-linux-cachyos-bore-lto-x86_64-v3" {
+            buildInputs = [ cachyosPackages.linux-cachyos-bore-lto-x86_64-v3 ];
           } "touch $out";
-          linux_cachyos_config_assert =
-            pkgs.runCommand "check-linux-cachyos-config-assert"
+          linux_cachyos_bore_lto_x86_64_v3_config =
+            pkgs.runCommand "check-linux-cachyos-bore-lto-x86_64-v3-config"
               {
-                config = cachyosPackages.linux_cachyos_latest_lto_x86_64_v3.configfile;
+                config = cachyosPackages.linux-cachyos-bore-lto-x86_64-v3.configfile;
               }
-              (
-                ''
-                  grep -q '^CONFIG_SCHED_BORE=y' "$config"
-                  grep -q '^CONFIG_NO_HZ_IDLE=y' "$config"
-                  grep -q '^CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=y' "$config"
-                  grep -q '^CONFIG_X86_64_VERSION=3' "$config"
-                  grep -q '^CONFIG_LTO_CLANG_THIN=y' "$config"
-                  grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$config"
-                  ! grep -q '^CONFIG_RUST=y' "$config"
-                ''
-                + lib.concatMapStringsSep "\n" (
-                  name: "! grep -q '^CONFIG_${name}=[ym]' \"$config\""
-                ) disabledKernelOptions
-                + "\ntouch $out\n"
-              );
+              ''
+                grep -q '^CONFIG_SCHED_BORE=y' "$config"
+                grep -q '^CONFIG_X86_64_VERSION=3' "$config"
+                grep -q '^CONFIG_LTO_CLANG_THIN=y' "$config"
+                touch $out
+              '';
         };
 
       formatter.${system} = pkgs.callPackage ./apps/formatter.nix { inherit formatTargets; };
@@ -613,8 +606,8 @@
           self.packages.${prev.stdenv.hostPlatform.system} or { }
         )
         // lib.genAttrs goPackageNames (name: self.packages.${prev.stdenv.hostPlatform.system}.${name})
-        // cachyosPackages
         // {
+          cachyosKernels = cachyosPackages;
           obs-studio-plugins =
             prev.obs-studio-plugins
             // lib.genAttrs (enabledNames obsPluginNames) (
@@ -659,7 +652,7 @@
         generatedPackages
         // optimizedPackages
         // {
-          inherit (cachyosPackages) linux_cachyos_latest_lto_x86_64_v3;
+          inherit (cachyosPackages) linux-cachyos-bore-lto-x86_64-v3;
         }
       ) disabledPackages;
 

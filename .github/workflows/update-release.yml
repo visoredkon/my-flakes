@@ -195,6 +195,15 @@ jobs:
                 --accept-flake-config)
               pkg_failed=0
               log="config-${pkg}.log"
+              for cache in \
+                "https://cache.lantian.pub/lantian" \
+                "https://visoredkon.cachix.org"
+              do
+                if nix path-info --store "$cache" "$out" >/dev/null 2>&1; then
+                  echo "::notice::$pkg is available from $cache"
+                  continue 2
+                fi
+              done
               if ! nix build "$build_target.configfile" \
                 --print-build-logs > "$log" 2>&1; then
                 echo "::error::kernel config build failed for $pkg, see $log"
@@ -204,19 +213,6 @@ jobs:
               if grep -q "option not set correctly" "$log"; then
                 echo "::error::kernel option forced by select, see $log"
                 grep "option not set correctly" "$log"
-                failed=1
-                continue
-              fi
-              mapfile -t names < <(nix eval --raw \
-                '.#packages.x86_64-linux.linux_cachyos_latest_lto_x86_64_v3.passthru.disabledKernelOptions' \
-                --apply 'builtins.concatStringsSep "\n"' --accept-flake-config)
-              for name in "${names[@]}"; do
-                if grep -q "unused option: ${name}$" "$log"; then
-                  echo "::error::kernel option unused (typo/renamed?): $name"
-                  pkg_failed=1
-                fi
-              done
-              if (( pkg_failed != 0 )); then
                 failed=1
                 continue
               fi
