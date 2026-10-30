@@ -75,16 +75,19 @@ let
   };
 
   xdgDesktopPortalHyprland =
-    (pkgs.xdg-desktop-portal-hyprland.override {
-      stdenv = llvmStdenv;
-      inherit
-        grim
-        hyprland
-        hyprlang
-        hyprutils
-        slurp
-        ;
-    }).overrideAttrs
+    (pkgs.xdg-desktop-portal-hyprland.override (
+      {
+        gcc16Stdenv = llvmStdenv;
+      }
+      // {
+        inherit
+          grim
+          hyprlang
+          hyprutils
+          slurp
+          ;
+      }
+    )).overrideAttrs
       thinLto;
 in
 {

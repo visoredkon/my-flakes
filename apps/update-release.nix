@@ -297,9 +297,6 @@ pkgs.writeShellApplication {
       mise)
         echo "https://github.com/jdx/mise/archive/refs/tags/v$version.tar.gz"
         ;;
-      sonora)
-        echo "https://github.com/sonorahq/sonora/archive/refs/tags/v$version.tar.gz"
-        ;;
       esac
     }
 
