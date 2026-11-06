@@ -106,6 +106,16 @@
           binName = "copilot";
           urlTemplate = "${baseUrl}/v{version}/copilot-linux-x64.tar.gz";
         };
+        "herdr-app" = rec {
+          baseUrl = "https://releases.herdr.dev/app";
+          binName = "herdr-app";
+          urlTemplate = "${baseUrl}/{version}/herdr-app-linux-x86_64.tar.gz";
+        };
+        "herdr-core" = rec {
+          baseUrl = "https://releases.herdr.dev/core";
+          binName = "herdr-core";
+          urlTemplate = "${baseUrl}/{version}/herdr-core-linux-x86_64.tar.gz";
+        };
         "kiro" = rec {
           baseUrl = "https://prod.download.desktop.kiro.dev";
           binName = "kiro";

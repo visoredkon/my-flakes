@@ -606,6 +606,9 @@ pkgs.writeShellApplication {
             version="''${tag#v}"
             ;;
         esac
+      elif [[ "$baseUrl" == *"releases.herdr.dev"* ]]; then
+        manifest=$(curl_retry -fsSL "$baseUrl/latest.json" || true)
+        version=$(jq -r '.version // ""' <<<"$manifest")
       elif [[ "$baseUrl" == *"prod.download.cli.kiro.dev"* ]]; then
         manifest=$(curl_retry -fsSL "$baseUrl/latest/manifest.json" || true)
         version=$(jq -r '.version // ""' <<<"$manifest")
