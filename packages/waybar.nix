@@ -16,6 +16,9 @@
     in
     base
     // {
+      version = builtins.substring 0 7 release.rev;
+      doInstallCheck = false;
+
       src = pkgs.fetchFromGitHub {
         owner = "Alexays";
         repo = "Waybar";
