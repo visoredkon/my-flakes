@@ -268,6 +268,7 @@
       optimizedReleaseNames = [
         "elephant"
         "libfprint"
+        "tuios"
         "waybar"
       ];
 
@@ -375,6 +376,12 @@
           branch = "master";
         };
 
+        "tuios" = {
+          owner = "Gaurav-Gosain";
+          repo = "tuios";
+          branch = "main";
+        };
+
         "waybar" = {
           owner = "Alexays";
           repo = "Waybar";
@@ -405,6 +412,8 @@
         // {
           "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
           "typescript" = mkApp "${generatedPackages.typescript}/bin/tsc";
+          "tuios" = mkApp "${optimizedPackages.tuios}/bin/tuios";
+          "tuios-web" = mkApp "${optimizedPackages.tuios}/bin/tuios-web";
           "update-release" = mkApp "${updateRelease}/bin/update-release";
         }
       ) disabledPackages;

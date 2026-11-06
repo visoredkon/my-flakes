@@ -320,7 +320,7 @@ pkgs.writeShellApplication {
       pvetui)
         echo "rev sourceSha256 vendorHash version"
         ;;
-      elephant)
+      elephant | tuios)
         echo "rev sourceSha256 vendorHash"
         ;;
       libfprint | waybar)
@@ -875,7 +875,7 @@ pkgs.writeShellApplication {
       sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
 
       case "$pkg" in
-      elephant)
+      elephant | tuios)
         vendorHashPlaceholder="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
         vendorHash=$(release_field_value "$releaseFile" "vendorHash")
         if [[ -z "$vendorHash" || "$vendorHash" == "$vendorHashPlaceholder" ]]; then
@@ -897,7 +897,7 @@ pkgs.writeShellApplication {
       fi
 
       case "$pkg" in
-      elephant)
+      elephant | tuios)
         if ! refresh_vendor_hash "$pkg" "$releaseFile"; then
           restore_release_file "$releaseFile" "$release_backup"
           return 1
