@@ -317,6 +317,9 @@ pkgs.writeShellApplication {
       bootdev | typescript)
         echo "sourceSha256 vendorHash version"
         ;;
+      pi)
+        echo "sourceSha256 version"
+        ;;
       pvetui)
         echo "rev sourceSha256 vendorHash version"
         ;;
@@ -773,6 +776,7 @@ pkgs.writeShellApplication {
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/refs/tags/v$version.tar.gz"
       sourceSha=""
+
       sourceSha=$(prefetch_source "$sourceUrl" || true)
       if [[ -z "$sourceSha" ]]; then
         add_failure "$pkg" "failed to compute sourceSha256"
@@ -816,7 +820,7 @@ pkgs.writeShellApplication {
         echo "vendorHash unchanged" >&2
       else
         correctHash=""
-        if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation.*go-modules"; then
+        if echo "$buildOutput" | grep -q "hash mismatch in fixed-output derivation"; then
           correctHash=$(echo "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -1 || true)
         fi
 
@@ -1045,7 +1049,7 @@ pkgs.writeShellApplication {
       else
         update_count=''${#updates[@]}
         if [[ "$update_count" -eq 0 ]]; then
-          commit_subject="chore(version): refresh release metadata"
+          commit_subject="chore(version): sync lockfile"
         elif [[ "$update_count" -eq 1 ]]; then
           parse_update "''${updates[0]}"
           commit_subject="chore(version): bump $pkg $from_version -> $to_version"
@@ -1060,7 +1064,7 @@ pkgs.writeShellApplication {
           echo "$commit_subject"
           echo
           if [[ "$update_count" -eq 0 ]]; then
-            echo "sync lockfile and release metadata"
+            echo "sync lockfile"
           else
             echo "bumped:"
             for update in "''${updates[@]}"; do

@@ -203,6 +203,11 @@
           repoName = "bootdev";
         };
 
+        "pi" = {
+          repoOwner = "earendil-works";
+          repoName = "pi";
+        };
+
         "pvetui" = {
           repoOwner = "devnullvoid";
           repoName = "pvetui";
@@ -237,6 +242,7 @@
           value = pkgs.callPackage ./packages/${name}.nix {
             release = goPackageReleases.${name};
             inherit optimization;
+            inherit (optimizedPackagesAll) wl-clipboard;
           };
         }) goPackageNames
       );
@@ -358,9 +364,13 @@
 
       formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
 
-      mkApp = program: {
+      mkApp = name: program: {
         inherit program;
         type = "app";
+        meta = {
+          description = name;
+          platforms = [ system ];
+        };
       };
 
       branchSourcesConfig = {
@@ -406,15 +416,16 @@
     in
     {
       apps.${system} = removeAttrs (
-        (builtins.mapAttrs (name: meta: mkApp "${generatedPackages.${name}}/bin/${meta.binName}") (
+        (builtins.mapAttrs (name: meta: mkApp name "${generatedPackages.${name}}/bin/${meta.binName}") (
           lib.filterAttrs (_: meta: meta ? binName) packageMetadata
         ))
         // {
-          "bootdev" = mkApp "${generatedPackages.bootdev}/bin/bootdev";
-          "typescript" = mkApp "${generatedPackages.typescript}/bin/tsc";
-          "tuios" = mkApp "${optimizedPackages.tuios}/bin/tuios";
-          "tuios-web" = mkApp "${optimizedPackages.tuios}/bin/tuios-web";
-          "update-release" = mkApp "${updateRelease}/bin/update-release";
+          "bootdev" = mkApp "bootdev" "${generatedPackages.bootdev}/bin/bootdev";
+          "pi" = mkApp "pi" "${generatedPackages.pi}/bin/pi";
+          "typescript" = mkApp "typescript" "${generatedPackages.typescript}/bin/tsc";
+          "tuios" = mkApp "tuios" "${optimizedPackages.tuios}/bin/tuios";
+          "tuios-web" = mkApp "tuios-web" "${optimizedPackages.tuios}/bin/tuios-web";
+          "update-release" = mkApp "update-release" "${updateRelease}/bin/update-release";
         }
       ) disabledPackages;
 
