@@ -1,5 +1,5 @@
 {
-  sha256 = "d7dee029352bf4b8986e7c4696b8ce54746c3eb648ffca3cc69bdeecc0ff06e9";
-  sourceSha256 = "sha256-P5AJXBKsIkU7v8yP7YxDMadsWQJS4wI2rE5+sVU+7iY=";
-  version = "2026.11.5";
+  sha256 = "bef140a1a96994029153dca8c00b1750b9a5a764fb9db2dc68d7bb40e8a29e8a";
+  sourceSha256 = "sha256-1VWM1BnI1GvclYBky5f5Y9HqeThmQUwCWQbsFQM1Eu0=";
+  version = "latest";
 }
