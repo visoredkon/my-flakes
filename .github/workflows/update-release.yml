@@ -137,10 +137,24 @@ jobs:
           for pkg in "${shard_pkgs[@]}"; do
             targets+=(".#packages.x86_64-linux.$pkg")
           done
+          build_pkg() {
+            local pkg="$1"
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if nix build ".#packages.x86_64-linux.$pkg" \
+                --print-build-logs --keep-going; then
+                return 0
+              fi
+              if (( attempt < 5 )); then
+                echo "retrying $pkg after failed build (attempt $((attempt + 1))/5)"
+                sleep $((attempt * 15))
+              fi
+            done
+            return 1
+          }
           if ! nix build --print-build-logs --keep-going "${targets[@]}"; then
             for pkg in "${shard_pkgs[@]}"; do
-              if ! nix build ".#packages.x86_64-linux.$pkg" \
-                --print-build-logs --keep-going; then
+              if ! build_pkg "$pkg"; then
                 echo "::error::build failed for $pkg"
                 failed_pkgs+=("$pkg")
               fi
