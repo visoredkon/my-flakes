@@ -132,6 +132,15 @@ pkgs.writeShellApplication {
       fi
     }
 
+    note_downloaded() {
+      local url="$1"
+      local file="$2"
+      local bytes
+
+      bytes=$(stat -c%s "$file" 2>/dev/null || echo "")
+      note_fetch "$url" "$(human_bytes "$bytes")"
+    }
+
     fetch_binary() {
       local url="$1"
       local dest="$2"
@@ -140,14 +149,11 @@ pkgs.writeShellApplication {
         return 1
       fi
 
-      local bytes
-      bytes=$(stat -c%s "$dest" 2>/dev/null || echo "")
-
-      if [[ -n "$bytes" ]]; then
-        note_fetch "$url" "$(human_bytes "$bytes")"
-      else
-        note_fetch "$url"
+      if [[ ! -s "$dest" ]]; then
+        return 1
       fi
+
+      note_downloaded "$url" "$dest"
     }
 
     prefetch_source() {
@@ -270,24 +276,23 @@ pkgs.writeShellApplication {
         return 1
       fi
 
-      local sha
-      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
-
-      local bytes
-      bytes=$(stat -c%s "$tmp" 2>/dev/null || echo "")
-
-      rm -f "$tmp"
-
-      if [[ -z "$sha" ]]; then
+      if [[ ! -s "$tmp" ]]; then
+        rm -f "$tmp"
         echo ""
         return 1
       fi
 
-      if [[ -n "$bytes" ]]; then
-        note_fetch "$url" "$(human_bytes "$bytes")"
-      else
-        note_fetch "$url"
+      local sha
+      sha=$(sha256sum "$tmp" | awk '{print $1}' || true)
+
+      if [[ -z "$sha" ]]; then
+        rm -f "$tmp"
+        echo ""
+        return 1
       fi
+
+      note_downloaded "$url" "$tmp"
+      rm -f "$tmp"
 
       echo "$sha"
     }
@@ -540,7 +545,7 @@ pkgs.writeShellApplication {
     }
 
     curl_retry() {
-      curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10 "$@"
+      curl --fail --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10 "$@"
     }
 
     collect_job_failure() {
@@ -599,8 +604,15 @@ pkgs.writeShellApplication {
         version=$(curl_retry -fsSL "$baseUrl/latest" | tr -d '\r\n' || true)
       elif [[ "$baseUrl" == *"github.com"* ]]; then
         repoBase="''${baseUrl%/releases/download}"
-        redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest" || true)
+        if ! redirect=$(curl_retry -sSL -o /dev/null -w '%{url_effective}' "$repoBase/releases/latest"); then
+          add_failure "$pkg" "failed to determine version from $repoBase/releases/latest"
+          return 1
+        fi
         tag=$(basename "$redirect" || true)
+        if [[ -z "$tag" || "$tag" == "latest" || "$redirect" == "$repoBase/releases/latest" ]]; then
+          add_failure "$pkg" "failed to determine version from $repoBase/releases/latest (no release tag redirect: $redirect)"
+          return 1
+        fi
         case "$pkg" in
           bun)
             version="''${tag#bun-v}"
