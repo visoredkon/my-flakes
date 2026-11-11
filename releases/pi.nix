@@ -1,4 +1,4 @@
 {
-  sourceSha256 = "sha256-G3SRvVaxOlgMY8bxl+SLAlF2+cMFQ2dBOuPo+NPKn/I=";
-  version = "1.5.1";
+  sourceSha256 = "sha256-0dKtABQqfvCLF0WOydu5rpycMqC+N8Pc9Ex4BWKElyw=";
+  version = "1.5.2";
 }
