@@ -133,6 +133,11 @@
           binName = "kiro-cli";
           urlTemplate = "${baseUrl}/{version}/kirocli-x86_64-linux.zip";
         };
+        "learnharness" = rec {
+          baseUrl = "https://github.com/amosblomqvist/learnharness/releases/download";
+          binName = "learnharness";
+          urlTemplate = "${baseUrl}/v{version}/LearnHarness-{version}-x86_64.AppImage";
+        };
         "mise" = rec {
           baseUrl = "https://github.com/jdx/mise/releases/download";
           binName = "mise";
