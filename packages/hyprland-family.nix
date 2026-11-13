@@ -51,25 +51,19 @@ let
 
   hyprpolkitagent = llvmOptimized fullLto "hyprpolkitagent" {
     inherit
-      aquamarine
-      hyprgraphics
       hyprlang
       hyprtoolkit
-      hyprutils
       ;
   };
 
   hypridle = llvmOptimized thinLto "hypridle" { inherit hyprlang hyprutils; };
 
-  hyprlock = llvmOptimized thinLto "hyprlock" { inherit hyprgraphics hyprlang hyprutils; };
+  hyprlock = llvmOptimized thinLto "hyprlock" { inherit hyprgraphics hyprlang; };
 
   hyprpaper = llvmOptimized thinLto "hyprpaper" {
     inherit
-      aquamarine
-      hyprgraphics
       hyprlang
       hyprtoolkit
-      hyprutils
       hyprwire
       ;
   };
@@ -83,7 +77,7 @@ let
         inherit
           grim
           hyprlang
-          hyprutils
+          hyprtoolkit
           slurp
           ;
       }
