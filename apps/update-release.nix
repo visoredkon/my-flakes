@@ -3,6 +3,7 @@
   packageMetadata,
   goPackagesConfig,
   branchSourcesConfig,
+  sourcePackagesConfig,
   pkgs,
   ...
 }:
@@ -22,6 +23,7 @@ let
   );
   goPackagesJson = builtins.toJSON goPackagesConfig;
   branchSourcesJson = builtins.toJSON branchSourcesConfig;
+  sourcePackagesJson = builtins.toJSON sourcePackagesConfig;
 in
 pkgs.writeShellApplication {
   name = "update-release";
@@ -36,7 +38,11 @@ pkgs.writeShellApplication {
     pkgs.nix
     pkgs.nixfmt
   ]
-  ++ lib.optionals (goPackagesConfig != { } || branchSourcesConfig != { }) [ pkgs.gh ];
+  ++
+    lib.optionals (goPackagesConfig != { } || branchSourcesConfig != { } || sourcePackagesConfig != { })
+      [
+        pkgs.gh
+      ];
   text = ''
     set -euo pipefail
 
@@ -47,6 +53,7 @@ pkgs.writeShellApplication {
     updates=()
     updated_packages=()
     uptodate_packages=()
+    declare -A sourceFields=()
 
     start_seconds=$SECONDS
 
@@ -335,12 +342,21 @@ pkgs.writeShellApplication {
         echo "rev sourceSha256"
         ;;
       *)
-        jq -r --arg pkg "$1" '.[$pkg].releaseFields // ["sha256", "version"] | join(" ")' <<<"$meta"
+        if jq -e --arg pkg "$1" 'has($pkg)' <<<"$sourcePackages" >/dev/null 2>&1; then
+          jq -r --arg pkg "$1" '.[$pkg].releaseFields | join(" ")' <<<"$sourcePackages"
+        else
+          jq -r --arg pkg "$1" '.[$pkg].releaseFields // ["sha256", "version"] | join(" ")' <<<"$meta"
+        fi
         ;;
       esac
     }
 
     release_value_for_field() {
+      if [[ -n "''${sourceFields[$1]:-}" ]]; then
+        echo "''${sourceFields[$1]}"
+        return
+      fi
+
       case "$1" in
       completionsSha256)
         echo "$completionsSha"
@@ -851,6 +867,167 @@ pkgs.writeShellApplication {
       fi
     }
 
+    refresh_source_hash() {
+      local pkg="$1"
+      local release_file="$2"
+      local field="$3"
+      local target="$4"
+      echo "get $field for $pkg, need build" >&2
+      if buildOutput=$(nix build --no-link "$target" 2>&1); then
+        echo "$field unchanged" >&2
+      else
+        local hashLine=""
+        local correctHash=""
+        hashLine=$(printf '%s\n' "$buildOutput" | grep "hash mismatch in fixed-output derivation" | head -n 1 || true)
+        if [[ "$hashLine" == *"-gradle-deps-"* ]]; then
+          correctHash=$(printf '%s\n' "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -n 1 || true)
+        fi
+
+        if [[ -n "$correctHash" ]]; then
+          sourceFields[$field]="$correctHash"
+          echo "found $field: $correctHash" >&2
+          if ! write_release_file "$pkg" "$release_file"; then
+            add_failure "$pkg" "failed to write $release_file"
+            return 1
+          fi
+        else
+          printf '%s\n' "$buildOutput" | tail -n 40 >&2
+          add_failure "$pkg" "could not figure out $field, set it by hand or run nix build $target"
+          return 1
+        fi
+      fi
+    }
+
+    update_source_package() {
+      local pkg="$1"
+      releaseFile="releases/$pkg.nix"
+      local channel owner repo ref
+      channel=$(jq -r --arg pkg "$pkg" '.[$pkg].channel' <<<"$sourcePackages")
+      owner=$(jq -r --arg pkg "$pkg" '.[$pkg].owner' <<<"$sourcePackages")
+      repo=$(jq -r --arg pkg "$pkg" '.[$pkg].repo' <<<"$sourcePackages")
+      ref=$(jq -r --arg pkg "$pkg" '.[$pkg].ref // ""' <<<"$sourcePackages")
+
+      case "$channel" in
+      stable)
+        ref=$(gh api "repos/$owner/$repo/releases/latest" --jq '.tag_name' || true)
+        ;;
+      branch) ;;
+      *)
+        add_failure "$pkg" "unknown channel '$channel' in flake.nix sourcePackagesConfig"
+        return 1
+        ;;
+      esac
+
+      if [[ -z "$ref" || "$ref" == "null" ]]; then
+        add_failure "$pkg" "failed to determine $channel ref via gh api"
+        return 1
+      fi
+
+      echo "check source package $pkg ($owner/$repo@$ref)" >&2
+
+      rev=$(gh api "repos/$owner/$repo/commits/$ref" --jq '.sha' || true)
+      if [[ -z "$rev" ]]; then
+        add_failure "$pkg" "failed to determine rev via gh api"
+        return 1
+      fi
+
+      current_rev=$(release_field_value "$releaseFile" "rev")
+      current_version=$(release_field_value "$releaseFile" "version")
+      current_hash=$(release_field_value "$releaseFile" "gradleDepsHash")
+
+      if [[ "$current_rev" == "$rev" && "$current_hash" != "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" ]]; then
+        if validate_release_file "$pkg" "$releaseFile"; then
+          echo "$pkg already on $rev" >&2
+          record_uptodate "$current_version"
+          return 0
+        fi
+      fi
+
+      local raw
+      raw="https://raw.githubusercontent.com/$owner/$repo/$rev"
+      jdkMajor=$(curl_retry -fsSL "$raw/gradle/gradle-daemon-jvm.properties" | gawk -F= '$1 == "toolchainVersion" { print $2 }' || true)
+      gradleMajor=$(curl_retry -fsSL "$raw/gradle/wrapper/gradle-wrapper.properties" | gawk 'match($0, /gradle-([0-9]+)[.]/, m) { print m[1] }' || true)
+      graalvmPins=$(curl_retry -fsSL "$raw/scripts/graalvm-pins.json" || true)
+      graalvmVersion=$(jq -r '.version // ""' <<<"$graalvmPins" || true)
+      graalvmUrl=$(jq -r '.platforms["linux-x64"].url // ""' <<<"$graalvmPins" || true)
+      graalvmShaHex=$(jq -r '.platforms["linux-x64"].sha256 // ""' <<<"$graalvmPins" || true)
+      graalvmSha256=$(nix hash convert --hash-algo sha256 --to sri "$graalvmShaHex" 2>/dev/null || true)
+      appVersion=$(curl_retry -fsSL "$raw/gradle.properties" | gawk -F= '$1 == "appVersion" { print $2 }' || true)
+
+      if [[ -z "$jdkMajor" || -z "$gradleMajor" || -z "$graalvmVersion" || -z "$graalvmUrl" || -z "$graalvmSha256" || -z "$appVersion" ]]; then
+        add_failure "$pkg" "failed to read upstream build metadata at $rev"
+        return 1
+      fi
+
+      version="$appVersion"
+      if [[ "$channel" == "branch" ]]; then
+        version="$appVersion+''${rev:0:7}"
+      fi
+
+      echo "$pkg: $current_version -> $version" >&2
+
+      sourceFields=()
+      sourceFields[rev]="$rev"
+      sourceFields[version]="$version"
+      sourceFields[jdkMajor]="$jdkMajor"
+      sourceFields[gradleMajor]="$gradleMajor"
+      sourceFields[graalvmSha256]="$graalvmSha256"
+      sourceFields[graalvmUrl]="$graalvmUrl"
+      sourceFields[graalvmVersion]="$graalvmVersion"
+
+      sourceSha=$(prefetch_source "https://github.com/$owner/$repo/archive/$rev.tar.gz" || true)
+      sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)
+      if [[ -z "$sourceSha" ]]; then
+        add_failure "$pkg" "failed to determine sourceSha256"
+        return 1
+      fi
+      sourceFields[sourceSha256]="$sourceSha"
+
+      local sub subPath subRepo subRev subSha
+      for sub in $(jq -r --arg pkg "$pkg" '.[$pkg].submodules // {} | keys[]' <<<"$sourcePackages"); do
+        subPath=$(jq -r --arg pkg "$pkg" --arg sub "$sub" '.[$pkg].submodules[$sub].path' <<<"$sourcePackages")
+        subRepo=$(jq -r --arg pkg "$pkg" --arg sub "$sub" '.[$pkg].submodules[$sub].repo' <<<"$sourcePackages")
+        subRev=$(gh api "repos/$owner/$repo/contents/$subPath?ref=$rev" --jq '.sha' || true)
+        if [[ -z "$subRev" ]]; then
+          add_failure "$pkg" "failed to determine $sub rev"
+          return 1
+        fi
+        subSha=$(prefetch_source "https://github.com/$subRepo/archive/$subRev.tar.gz" || true)
+        subSha=$(nix hash convert --hash-algo sha256 --to sri "$subSha" || true)
+        if [[ -z "$subSha" ]]; then
+          add_failure "$pkg" "failed to determine $sub source hash"
+          return 1
+        fi
+        sourceFields["''${sub}Rev"]="$subRev"
+        sourceFields["''${sub}Sha256"]="$subSha"
+      done
+
+      sourceFields[gradleDepsHash]=$(release_field_value "$releaseFile" "gradleDepsHash")
+      if [[ -z "''${sourceFields[gradleDepsHash]}" ]]; then
+        sourceFields[gradleDepsHash]="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      fi
+
+      if ! validate_release_values "$pkg"; then
+        return 1
+      fi
+
+      release_backup=$(backup_release_file "$releaseFile")
+
+      if ! write_release_file "$pkg" "$releaseFile"; then
+        add_failure "$pkg" "failed to write $releaseFile"
+        restore_release_file "$releaseFile" "$release_backup"
+        return 1
+      fi
+
+      if ! refresh_source_hash "$pkg" "$releaseFile" "gradleDepsHash" ".#$pkg.passthru.gradleDeps"; then
+        restore_release_file "$releaseFile" "$release_backup"
+        return 1
+      fi
+
+      rm -f "$release_backup"
+      record_update "$current_version" "$version"
+    }
+
     update_branch_package() {
       local pkg="$1"
       releaseFile="releases/$pkg.nix"
@@ -928,12 +1105,14 @@ pkgs.writeShellApplication {
     meta='${metaJson}'
     goPackages='${goPackagesJson}'
     branchSources='${branchSourcesJson}'
+    sourcePackages='${sourcePackagesJson}'
     package_names=$(jq -r 'keys[]' <<<"$meta")
 
     total_packages=0
     total_packages=$((total_packages + $(jq 'keys | length' <<<"$meta")))
     total_packages=$((total_packages + $(jq 'keys | length' <<<"$goPackages")))
     total_packages=$((total_packages + $(jq 'keys | length' <<<"$branchSources")))
+    total_packages=$((total_packages + $(jq 'keys | length' <<<"$sourcePackages")))
 
     status_line header "update-release: checking $total_packages packages ($max_jobs parallel jobs)"
     printf '\n' >&2
@@ -948,6 +1127,10 @@ pkgs.writeShellApplication {
 
     for pkg in $(jq -r 'keys[]' <<<"$branchSources"); do
       spawn_job update_branch_package "$pkg"
+    done
+
+    for pkg in $(jq -r 'keys[]' <<<"$sourcePackages"); do
+      spawn_job update_source_package "$pkg"
     done
 
     for pid in "''${running_pids[@]}"; do

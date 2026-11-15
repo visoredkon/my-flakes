@@ -38,6 +38,7 @@
           builtins.elem (lib.getName pkg) [
             "antigravity"
             "antigravity-cli"
+            "graalvm-oracle"
             "kiro"
             "warp-terminal"
             "zcode"
@@ -55,6 +56,9 @@
         "bootdev"
         "codebase-memory-mcp"
         "copilot-cli"
+        "fprintd"
+        "herdr-app"
+        "herdr-core"
         "kiro"
         "kiro-cli"
         "libfprint"
@@ -228,6 +232,39 @@
 
       goPackageNames = builtins.attrNames activeGoPackagesConfig;
 
+      sourcePackagesConfig = {
+        "metrolist" = {
+          channel = "stable";
+          owner = "MetrolistGroup";
+          repo = "Metrolist";
+          releaseFields = [
+            "gradleDepsHash"
+            "graalvmSha256"
+            "graalvmUrl"
+            "graalvmVersion"
+            "gradleMajor"
+            "jdkMajor"
+            "metroprotoRev"
+            "metroprotoSha256"
+            "opusRev"
+            "opusSha256"
+            "rev"
+            "sourceSha256"
+            "version"
+          ];
+          submodules = {
+            metroproto = {
+              path = "metroproto";
+              repo = "MetrolistGroup/metroproto";
+            };
+            opus = {
+              path = "opusDecoder/src/main/jni/libopus";
+              repo = "xiph/opus";
+            };
+          };
+        };
+      };
+
       loadRelease = name: import ./releases/${name}.nix;
 
       loadReleases =
@@ -251,6 +288,14 @@
           };
         }) goPackageNames
       );
+
+      sourcePackages = builtins.mapAttrs (
+        name: config:
+        pkgs.callPackage ./packages/${name}.nix {
+          inherit (config) owner repo;
+          release = loadRelease name;
+        }
+      ) sourcePackagesConfig;
 
       optimizedPlainNames = [
         "bat"
@@ -365,7 +410,8 @@
             inherit (meta) release urlTemplate;
           }
         ) packageMetadata)
-        // goPackages;
+        // goPackages
+        // sourcePackages;
 
       formatTargets = "apps/*.nix packages/*.nix releases/*.nix flake.nix";
 
@@ -410,6 +456,7 @@
         inherit packageMetadata;
         goPackagesConfig = activeGoPackagesConfig;
         branchSourcesConfig = activeBranchSourcesConfig;
+        inherit sourcePackagesConfig;
       };
 
       cachyos = pkgs.callPackage ./packages/cachyos-kernel.nix {
@@ -426,6 +473,7 @@
         ))
         // {
           "bootdev" = mkApp "bootdev" "${generatedPackages.bootdev}/bin/bootdev";
+          "metrolist" = mkApp "metrolist" "${sourcePackages.metrolist}/bin/metrolist";
           "pi" = mkApp "pi" "${generatedPackages.pi}/bin/pi";
           "typescript" = mkApp "typescript" "${generatedPackages.typescript}/bin/tsc";
           "tuios" = mkApp "tuios" "${optimizedPackages.tuios}/bin/tuios";
@@ -454,6 +502,12 @@
             buildInputs = [ goPackages.${name} ];
           } "touch $out"
         ) goPackages)
+        // (builtins.mapAttrs (
+          name: _:
+          pkgs.runCommand "check-${name}" {
+            buildInputs = [ sourcePackages.${name} ];
+          } "touch $out"
+        ) sourcePackages)
         // (builtins.mapAttrs (
           name: _:
           pkgs.runCommand "check-${name}" {
@@ -627,7 +681,7 @@
 
       overlays.default =
         _: prev:
-        builtins.intersectAttrs (activePackagesConfig // optimizedPackages) (
+        builtins.intersectAttrs (activePackagesConfig // optimizedPackages // sourcePackagesConfig) (
           self.packages.${prev.stdenv.hostPlatform.system} or { }
         )
         // lib.genAttrs goPackageNames (name: self.packages.${prev.stdenv.hostPlatform.system}.${name})
