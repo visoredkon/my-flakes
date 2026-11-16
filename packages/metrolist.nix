@@ -187,8 +187,7 @@ pkgs.stdenv.mkDerivation {
     chmod -R u+w metroproto opusDecoder/src/main/jni/libopus
 
     substituteInPlace scripts/desktop-native-image/native_image.py \
-      --replace-fail "-J-Xmx12g" "-J-Xmx10g" \
-      --replace-fail "'-Os'" "'-O3'"
+      --replace-fail "'-Os'" "'-O2'"
 
     if grep -q -- "-march=compatibility" scripts/desktop-native-image/native_image.py; then
       substituteInPlace scripts/desktop-native-image/native_image.py \
