@@ -187,7 +187,8 @@ pkgs.stdenv.mkDerivation {
     chmod -R u+w metroproto opusDecoder/src/main/jni/libopus
 
     substituteInPlace scripts/desktop-native-image/native_image.py \
-      --replace-fail "'-Os'" "'-O2'"
+      --replace-fail "'-Os'" "'-O2'" \
+      --replace-fail "'-H:+IncludeAllLocales'" "'-H:IncludeLocales=id,en'"
 
     if grep -q -- "-march=compatibility" scripts/desktop-native-image/native_image.py; then
       substituteInPlace scripts/desktop-native-image/native_image.py \
@@ -203,6 +204,7 @@ pkgs.stdenv.mkDerivation {
     export JAVA_HOME=${jdk}
     export LOCAL_MAVEN_REPO=${gradleDeps}
     export LIBRARY_PATH=${lib.makeLibraryPath nativeLinkInputs}
+    export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
 
     cat > "$TMPDIR/local-repo.init.gradle" <<EOF
     def deps = System.getenv('LOCAL_MAVEN_REPO')
@@ -228,25 +230,29 @@ pkgs.stdenv.mkDerivation {
       -Pmetrolist.sourceRevision=${release.rev} \
       :desktopApp:prepareNativeImage
 
-    : > "$TMPDIR/native-work/build.log"
+    run_native_image() {
+      : > "$TMPDIR/native-work/build.log"
 
-    python3 scripts/desktop-native-image/native_image.py \
-      --platform linux-x64 \
-      --work $TMPDIR/native-work \
-      --graalvm ${graalvm} \
-      --inside-scope &
-    native_pid=$!
+      python3 scripts/desktop-native-image/native_image.py \
+        --platform linux-x64 \
+        --work $TMPDIR/native-work \
+        --graalvm ${graalvm} \
+        --inside-scope &
+      native_pid=$!
 
-    stdbuf -oL -eL tail -n +1 -F --pid="$native_pid" "$TMPDIR/native-work/build.log" &
-    tail_pid=$!
+      stdbuf -oL -eL tail -n +1 -F --pid="$native_pid" "$TMPDIR/native-work/build.log" &
+      tail_pid=$!
 
-    status=0
-    wait "$native_pid" || status=$?
-    wait "$tail_pid" || true
+      status=0
+      wait "$native_pid" || status=$?
+      wait "$tail_pid" || true
 
-    if (( status != 0 )); then
-      exit "$status"
-    fi
+      if (( status != 0 )); then
+        exit "$status"
+      fi
+    }
+
+    run_native_image
 
     runHook postBuild
   '';
