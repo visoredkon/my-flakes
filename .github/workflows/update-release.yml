@@ -207,7 +207,7 @@ jobs:
       - name: build metrolist
         run: |
           set -o pipefail
-          permanent_error_pattern='returned error: (400|401|403|404|410)|hash mismatch|option not set correctly|OutOfMemoryError|ran out of memory'
+          permanent_error_pattern='returned error: (400|401|403|404|410)|hash mismatch|option not set correctly|OutOfMemoryError|ran out of memory|Image generator watchdog'
           log_file="$RUNNER_TEMP/metrolist-build.log"
           for attempt in 1 2 3 4 5; do
             if nix build ".#packages.x86_64-linux.metrolist" \

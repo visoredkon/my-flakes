@@ -60,10 +60,14 @@ let
   ];
 
   runtimeLibs = with pkgs; [
+    dbus.lib
+    flac.out
     fontconfig
+    glib
     gtk3
     libGL
     libsecret
+    stdenv.cc.cc.lib
     webkitgtk_4_1
   ];
 
@@ -188,7 +192,9 @@ pkgs.stdenv.mkDerivation {
 
     substituteInPlace scripts/desktop-native-image/native_image.py \
       --replace-fail "'-Os'" "'-O2'" \
-      --replace-fail "'-H:+IncludeAllLocales'" "'-H:IncludeLocales=id,en'"
+      --replace-fail "'-H:+IncludeAllLocales'" "'-H:IncludeLocales=id,en'" \
+      --replace-fail "'-H:+AddAllCharsets'" "'-H:+AddAllCharsets', '-H:IncludeResources=linux-x86-64/.*', '-H:IncludeResources=version.properties', '-H:DeadlockWatchdogInterval=30'" \
+      --replace-fail "'-J-Xmx12g'" "'-J-Xmx13g'"
 
     if grep -q -- "-march=compatibility" scripts/desktop-native-image/native_image.py; then
       substituteInPlace scripts/desktop-native-image/native_image.py \
