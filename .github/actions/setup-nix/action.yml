@@ -7,6 +7,17 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: configure curl retries
+      shell: bash
+      run: |
+        curl_path="$(command -v curl)"
+        shim_dir="$RUNNER_TEMP/curl-retry"
+        mkdir -p "$shim_dir"
+        printf '#!/usr/bin/env bash\nexec %q --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 "$@"\n' \
+          "$curl_path" > "$shim_dir/curl"
+        chmod +x "$shim_dir/curl"
+        echo "$shim_dir" >> "$GITHUB_PATH"
+
     - name: install-nix
       uses: cachix/install-nix-action@v31
 
