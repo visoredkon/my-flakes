@@ -1,5 +1,5 @@
 {
-  gradleDepsHash = "sha256-UrweoX8grIiA4wZqJVJIlk997jhrXwWyEOKwEX4J5co=";
+  gradleDepsHash = "sha256-k8h4crQgma7GZVGeGzPJMn5H97ClHjAL3iCKRiGgFxU=";
   graalvmSha256 = "sha256-dgB8MJ+CGq9DW85jFi6gOVWH/Hc1CAHIFkP+f+6jcnY=";
   graalvmUrl = "https://download.oracle.com/graalvm/25/archive/graalvm-jdk-25.0.4_linux-x64_bin.tar.gz";
   graalvmVersion = "25.0.4";

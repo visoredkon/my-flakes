@@ -872,29 +872,45 @@ pkgs.writeShellApplication {
       local release_file="$2"
       local field="$3"
       local target="$4"
+      local attempt
+      local buildOutput=""
+      local correctHash=""
       echo "get $field for $pkg, need build" >&2
-      if buildOutput=$(nix build --no-link "$target" 2>&1); then
-        echo "$field unchanged" >&2
-      else
-        local hashLine=""
-        local correctHash=""
-        hashLine=$(printf '%s\n' "$buildOutput" | grep "hash mismatch in fixed-output derivation" | head -n 1 || true)
-        if [[ "$hashLine" == *"-gradle-deps-"* ]]; then
-          correctHash=$(printf '%s\n' "$buildOutput" | grep "got:" | awk '{print $NF}' | tail -n 1 || true)
+      for attempt in 1 2 3; do
+        correctHash=""
+        if buildOutput=$(nix build --no-link "$target" 2>&1); then
+          echo "$field unchanged" >&2
+          return 0
         fi
+        correctHash=$(
+          printf '%s\n' "$buildOutput" | awk '
+            /hash mismatch in fixed-output derivation/ {
+              in_target = ($0 ~ /-gradle-deps-/)
+            }
+            in_target && /got:/ {
+              print $NF
+              exit
+            }
+          '
+        )
+        [[ -n "$correctHash" ]] && break
+        if (( attempt < 3 )); then
+          echo "retrying $field build for $pkg (attempt $((attempt + 1))/3)" >&2
+          sleep $((15 * (2 ** (attempt - 1))))
+        fi
+      done
 
-        if [[ -n "$correctHash" ]]; then
-          sourceFields[$field]="$correctHash"
-          echo "found $field: $correctHash" >&2
-          if ! write_release_file "$pkg" "$release_file"; then
-            add_failure "$pkg" "failed to write $release_file"
-            return 1
-          fi
-        else
-          printf '%s\n' "$buildOutput" | tail -n 40 >&2
-          add_failure "$pkg" "could not figure out $field, set it by hand or run nix build $target"
+      if [[ -n "$correctHash" ]]; then
+        sourceFields[$field]="$correctHash"
+        echo "found $field: $correctHash" >&2
+        if ! write_release_file "$pkg" "$release_file"; then
+          add_failure "$pkg" "failed to write $release_file"
           return 1
         fi
+      else
+        printf '%s\n' "$buildOutput" | tail -n 40 >&2
+        add_failure "$pkg" "could not figure out $field after 3 attempts; set it by hand or run nix build $target"
+        return 1
       fi
     }
 
@@ -937,9 +953,15 @@ pkgs.writeShellApplication {
 
       if [[ "$current_rev" == "$rev" && "$current_hash" != "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" ]]; then
         if validate_release_file "$pkg" "$releaseFile"; then
-          echo "$pkg already on $rev" >&2
-          record_uptodate "$current_version"
-          return 0
+          local verify_output=""
+          if verify_output=$(nix build --no-link --rebuild \
+            ".#$pkg.passthru.gradleDeps" 2>&1); then
+            printf '%s\n' "$verify_output" >/dev/null
+            echo "$pkg already on $rev" >&2
+            record_uptodate "$current_version"
+            return 0
+          fi
+          echo "$pkg: gradleDepsHash failed verification, refreshing" >&2
         fi
       fi
 
@@ -1002,10 +1024,7 @@ pkgs.writeShellApplication {
         sourceFields["''${sub}Sha256"]="$subSha"
       done
 
-      sourceFields[gradleDepsHash]=$(release_field_value "$releaseFile" "gradleDepsHash")
-      if [[ -z "''${sourceFields[gradleDepsHash]}" ]]; then
-        sourceFields[gradleDepsHash]="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      fi
+      sourceFields[gradleDepsHash]="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
       if ! validate_release_values "$pkg"; then
         return 1
