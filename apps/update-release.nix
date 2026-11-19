@@ -954,7 +954,7 @@ pkgs.writeShellApplication {
       if [[ "$current_rev" == "$rev" && "$current_hash" != "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" ]]; then
         if validate_release_file "$pkg" "$releaseFile"; then
           local verify_output=""
-          if verify_output=$(nix build --no-link --rebuild \
+          if verify_output=$(nix build --no-link \
             ".#$pkg.passthru.gradleDeps" 2>&1); then
             printf '%s\n' "$verify_output" >/dev/null
             echo "$pkg already on $rev" >&2

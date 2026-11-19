@@ -168,7 +168,9 @@ pkgs.stdenv.mkDerivation {
     gradle
     jdk
     pkgs.autoPatchelfHook
+    pkgs.clang
     pkgs.makeWrapper
+    pkgs.mold
     pkgs.python3
     pkgs.wrapGAppsHook3
   ];
@@ -194,7 +196,9 @@ pkgs.stdenv.mkDerivation {
       --replace-fail "'-Os'" "'-O2'" \
       --replace-fail "'-H:+IncludeAllLocales'" "'-H:IncludeLocales=id,en'" \
       --replace-fail "'-H:+AddAllCharsets'" "'-H:+AddAllCharsets', '-H:IncludeResources=linux-x86-64/.*', '-H:IncludeResources=version.properties', '-H:DeadlockWatchdogInterval=30'" \
-      --replace-fail "'-J-Xmx12g'" "'-J-Xmx13g'"
+      --replace-fail "'-J-Xmx12g'" "'-J-Xmx14g'" \
+      --replace-fail "options = [str(compiler), '-J-Xmx14g'" \
+      "options = [str(compiler), '--native-compiler-path=' + os.environ['METROLIST_C_COMPILER'], '-H:-CheckToolchain', '-J-Xmx14g'"
 
     if grep -q -- "-march=compatibility" scripts/desktop-native-image/native_image.py; then
       substituteInPlace scripts/desktop-native-image/native_image.py \
@@ -211,6 +215,13 @@ pkgs.stdenv.mkDerivation {
     export LOCAL_MAVEN_REPO=${gradleDeps}
     export LIBRARY_PATH=${lib.makeLibraryPath nativeLinkInputs}
     export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
+
+    cat > "$TMPDIR/cc-clang-mold" <<'EOF'
+    #!${pkgs.bash}/bin/bash
+    exec ${pkgs.clang}/bin/clang -march=x86-64-v3 -O3 -fuse-ld=mold "$@"
+    EOF
+    chmod +x "$TMPDIR/cc-clang-mold"
+    export METROLIST_C_COMPILER="$TMPDIR/cc-clang-mold"
 
     cat > "$TMPDIR/local-repo.init.gradle" <<EOF
     def deps = System.getenv('LOCAL_MAVEN_REPO')
