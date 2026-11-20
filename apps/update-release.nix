@@ -969,14 +969,9 @@ pkgs.writeShellApplication {
       raw="https://raw.githubusercontent.com/$owner/$repo/$rev"
       jdkMajor=$(curl_retry -fsSL "$raw/gradle/gradle-daemon-jvm.properties" | gawk -F= '$1 == "toolchainVersion" { print $2 }' || true)
       gradleMajor=$(curl_retry -fsSL "$raw/gradle/wrapper/gradle-wrapper.properties" | gawk 'match($0, /gradle-([0-9]+)[.]/, m) { print m[1] }' || true)
-      graalvmPins=$(curl_retry -fsSL "$raw/scripts/graalvm-pins.json" || true)
-      graalvmVersion=$(jq -r '.version // ""' <<<"$graalvmPins" || true)
-      graalvmUrl=$(jq -r '.platforms["linux-x64"].url // ""' <<<"$graalvmPins" || true)
-      graalvmShaHex=$(jq -r '.platforms["linux-x64"].sha256 // ""' <<<"$graalvmPins" || true)
-      graalvmSha256=$(nix hash convert --hash-algo sha256 --to sri "$graalvmShaHex" 2>/dev/null || true)
       appVersion=$(curl_retry -fsSL "$raw/gradle.properties" | gawk -F= '$1 == "appVersion" { print $2 }' || true)
 
-      if [[ -z "$jdkMajor" || -z "$gradleMajor" || -z "$graalvmVersion" || -z "$graalvmUrl" || -z "$graalvmSha256" || -z "$appVersion" ]]; then
+      if [[ -z "$jdkMajor" || -z "$gradleMajor" || -z "$appVersion" ]]; then
         add_failure "$pkg" "failed to read upstream build metadata at $rev"
         return 1
       fi
@@ -993,9 +988,6 @@ pkgs.writeShellApplication {
       sourceFields[version]="$version"
       sourceFields[jdkMajor]="$jdkMajor"
       sourceFields[gradleMajor]="$gradleMajor"
-      sourceFields[graalvmSha256]="$graalvmSha256"
-      sourceFields[graalvmUrl]="$graalvmUrl"
-      sourceFields[graalvmVersion]="$graalvmVersion"
 
       sourceSha=$(prefetch_source "https://github.com/$owner/$repo/archive/$rev.tar.gz" || true)
       sourceSha=$(nix hash convert --hash-algo sha256 --to sri "$sourceSha" || true)

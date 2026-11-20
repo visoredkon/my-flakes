@@ -38,7 +38,6 @@
           builtins.elem (lib.getName pkg) [
             "antigravity"
             "antigravity-cli"
-            "graalvm-oracle"
             "kiro"
             "warp-terminal"
             "zcode"
@@ -239,9 +238,6 @@
           repo = "Metrolist";
           releaseFields = [
             "gradleDepsHash"
-            "graalvmSha256"
-            "graalvmUrl"
-            "graalvmVersion"
             "gradleMajor"
             "jdkMajor"
             "metroprotoRev"

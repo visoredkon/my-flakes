@@ -123,7 +123,7 @@ jobs:
               if p=$(pinned_shard "$pkg"); then
                 s="$p"
               fi
-              if (( s == ${{ matrix.shard }} )) && [[ "$pkg" != "metrolist" ]]; then
+              if (( s == ${{ matrix.shard }} )); then
                 shard_pkgs+=("$pkg")
               fi
               ;;
@@ -182,54 +182,6 @@ jobs:
           if (( ${#failed_pkgs[@]} > 0 )); then
             exit 1
           fi
-
-  build-metrolist:
-    needs: update-my-flakes
-    # if: needs.update-my-flakes.outputs.updated == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    permissions:
-      contents: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      USER: runner
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: setup nix
-        uses: ./.github/actions/setup-nix
-        with:
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-      - name: build metrolist
-        run: |
-          set -o pipefail
-          permanent_error_pattern='returned error: (400|401|403|404|410)|hash mismatch|option not set correctly|OutOfMemoryError|ran out of memory|Image generator watchdog'
-          log_file="$RUNNER_TEMP/metrolist-build.log"
-          for attempt in 1 2 3 4 5; do
-            if nix build ".#packages.x86_64-linux.metrolist" \
-              --print-build-logs --max-jobs 1 --accept-flake-config 2>&1 |
-              tee "$log_file"; then
-              break
-            fi
-            if grep -qE "$permanent_error_pattern" "$log_file"; then
-              echo "::error::permanent failure for metrolist, not retrying"
-              exit 1
-            fi
-            if (( attempt == 5 )); then
-              echo "::error::build failed for metrolist"
-              exit 1
-            fi
-            echo "retrying metrolist after failed build (attempt $((attempt + 1))/5)"
-            sleep $((15 * (2 ** (attempt - 1))))
-          done
-          path=$(nix path-info ".#packages.x86_64-linux.metrolist^out" \
-            --accept-flake-config)
-          cachix push visoredkon "$path"
-          cachix pin visoredkon "latest-metrolist" "$path" --keep-revisions 1
 
   build-kernel:
     needs: update-my-flakes

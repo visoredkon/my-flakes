@@ -1,8 +1,5 @@
 {
-  gradleDepsHash = "sha256-N6ZwhkW7h3TsrX7qK+I7w0AKjfwikj8Ua3XTDYPuJ90=";
-  graalvmSha256 = "sha256-dgB8MJ+CGq9DW85jFi6gOVWH/Hc1CAHIFkP+f+6jcnY=";
-  graalvmUrl = "https://download.oracle.com/graalvm/25/archive/graalvm-jdk-25.0.4_linux-x64_bin.tar.gz";
-  graalvmVersion = "25.0.4";
+  gradleDepsHash = "sha256-RJOaFkPoG8pXpJTD5KfpuDgCnUfn6tJuIOl+PkZPN4M=";
   gradleMajor = "9";
   jdkMajor = "25";
   metroprotoRev = "c65557e90e90c23e62101e69bbdc98af9f6c7ce5";

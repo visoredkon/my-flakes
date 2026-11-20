@@ -36,30 +36,9 @@ let
   gradle =
     pkgs."gradle_${release.gradleMajor}"
       or (throw "metrolist: nixpkgs has no gradle_${release.gradleMajor}; update flake.lock");
-  graalvm =
-    (pkgs.graalvmPackages."graalvm-oracle_${lib.versions.major release.graalvmVersion}"
-      or (throw "metrolist: nixpkgs has no graalvm-oracle_${lib.versions.major release.graalvmVersion}; update flake.lock")
-    ).overrideAttrs
-      (_: {
-        version = release.graalvmVersion;
-        src = pkgs.fetchurl {
-          url = release.graalvmUrl;
-          hash = release.graalvmSha256;
-        };
-      });
-
-  nativeLinkInputs = with pkgs; [
-    alsa-lib
-    freetype
-    libx11
-    libxext
-    libxi
-    libxrender
-    libxtst
-    zlib
-  ];
 
   runtimeLibs = with pkgs; [
+    alsa-lib
     dbus.lib
     flac.out
     fontconfig
@@ -67,9 +46,23 @@ let
     gtk3
     libGL
     libsecret
+    libx11
+    libxext
+    libxi
+    libxrender
+    libxtst
     stdenv.cc.cc.lib
     webkitgtk_4_1
+    zlib
   ];
+
+  fixJlinkCds = ''
+    substituteInPlace desktopApp/build.gradle.kts \
+      --replace-fail 'File(toolchainHome.get(), "bin/$javaName").copyTo(java, overwrite = true)' \
+      'listOf(File(toolchainHome.get(), "bin/.$javaName-wrapped"), File(toolchainHome.get(), "bin/$javaName")).first { it.isFile }.copyTo(java, overwrite = true)' \
+      --replace-fail 'val cdsOptions = desktopMemoryJvmArgs.toList()' \
+      'val cdsOptions = desktopMemoryJvmArgs.toList() + listOf("--add-opens=java.base/java.lang=ALL-UNNAMED", "--add-opens=java.desktop/sun.awt=ALL-UNNAMED", "--add-opens=java.desktop/java.awt=ALL-UNNAMED", "--add-opens=java.desktop/sun.swing=ALL-UNNAMED", "--add-opens=jdk.security.auth/com.sun.security.auth.module=ALL-UNNAMED", "--add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")'
+  '';
 
   gradleDeps = pkgs.stdenvNoCC.mkDerivation {
     pname = "metrolist-gradle-deps";
@@ -83,6 +76,7 @@ let
     nativeBuildInputs = [
       gradle
       jdk
+      pkgs.binutils
       pkgs.cacert
       pkgs.python3
     ];
@@ -92,6 +86,8 @@ let
     outputHash = release.gradleDepsHash;
 
     dontFixup = true;
+
+    postPatch = fixJlinkCds;
 
     buildPhase = ''
       runHook preBuild
@@ -108,10 +104,11 @@ let
         --no-daemon \
         --no-build-cache \
         --no-configuration-cache \
-        -I scripts/desktop-native-image/prepare.init.gradle \
-        -PnativeExperimentDir=$TMPDIR/native-work \
+        -Dorg.gradle.java.installations.paths=${jdk} \
+        -Dorg.gradle.java.installations.auto-download=false \
+        -PappVersion=${version} \
         -Pmetrolist.debug=false \
-        :desktopApp:prepareNativeImage
+        :desktopApp:createReleaseDistributable
 
       python3 - "$GRADLE_USER_HOME/caches/modules-2/files-2.1" "$out" <<'PY'
       import pathlib
@@ -167,43 +164,25 @@ pkgs.stdenv.mkDerivation {
   nativeBuildInputs = [
     gradle
     jdk
-    pkgs.autoPatchelfHook
-    pkgs.clang
+    pkgs.binutils
     pkgs.makeWrapper
-    pkgs.mold
     pkgs.python3
-    pkgs.wrapGAppsHook3
   ];
 
-  buildInputs =
-    nativeLinkInputs
-    ++ (with pkgs; [
-      gdk-pixbuf
-      glib-networking
-      gsettings-desktop-schemas
-      gtk3
-    ]);
+  buildInputs = with pkgs; [
+    gdk-pixbuf
+    glib-networking
+    gsettings-desktop-schemas
+    gtk3
+  ];
 
   strictDeps = true;
   dontStrip = true;
 
-  postPatch = ''
+  postPatch = fixJlinkCds + ''
     cp -r ${metroproto}/. metroproto/
     cp -r ${opus}/. opusDecoder/src/main/jni/libopus/
     chmod -R u+w metroproto opusDecoder/src/main/jni/libopus
-
-    substituteInPlace scripts/desktop-native-image/native_image.py \
-      --replace-fail "'-Os'" "'-O2'" \
-      --replace-fail "'-H:+IncludeAllLocales'" "'-H:IncludeLocales=id,en'" \
-      --replace-fail "'-H:+AddAllCharsets'" "'-H:+AddAllCharsets', '-H:IncludeResources=linux-x86-64/.*', '-H:IncludeResources=version.properties', '-H:DeadlockWatchdogInterval=30'" \
-      --replace-fail "'-J-Xmx12g'" "'-J-Xmx14g'" \
-      --replace-fail "options = [str(compiler), '-J-Xmx14g'" \
-      "options = [str(compiler), '--native-compiler-path=' + os.environ['METROLIST_C_COMPILER'], '-H:-CheckToolchain', '-J-Xmx14g'"
-
-    if grep -q -- "-march=compatibility" scripts/desktop-native-image/native_image.py; then
-      substituteInPlace scripts/desktop-native-image/native_image.py \
-        --replace-fail "-march=compatibility" "-march=x86-64-v3"
-    fi
   '';
 
   buildPhase = ''
@@ -213,15 +192,7 @@ pkgs.stdenv.mkDerivation {
     export GRADLE_USER_HOME=$TMPDIR/gradle-home
     export JAVA_HOME=${jdk}
     export LOCAL_MAVEN_REPO=${gradleDeps}
-    export LIBRARY_PATH=${lib.makeLibraryPath nativeLinkInputs}
     export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
-
-    cat > "$TMPDIR/cc-clang-mold" <<'EOF'
-    #!${pkgs.bash}/bin/bash
-    exec ${pkgs.clang}/bin/clang -march=x86-64-v3 -O3 -fuse-ld=mold "$@"
-    EOF
-    chmod +x "$TMPDIR/cc-clang-mold"
-    export METROLIST_C_COMPILER="$TMPDIR/cc-clang-mold"
 
     cat > "$TMPDIR/local-repo.init.gradle" <<EOF
     def deps = System.getenv('LOCAL_MAVEN_REPO')
@@ -238,38 +209,12 @@ pkgs.stdenv.mkDerivation {
       --no-build-cache \
       --no-configuration-cache \
       -I "$TMPDIR/local-repo.init.gradle" \
-      -I scripts/desktop-native-image/prepare.init.gradle \
       -Dorg.gradle.java.installations.paths=${jdk} \
       -Dorg.gradle.java.installations.auto-download=false \
       -PappVersion=${release.version} \
-      -PnativeExperimentDir=$TMPDIR/native-work \
       -Pmetrolist.debug=false \
       -Pmetrolist.sourceRevision=${release.rev} \
-      :desktopApp:prepareNativeImage
-
-    run_native_image() {
-      : > "$TMPDIR/native-work/build.log"
-
-      python3 scripts/desktop-native-image/native_image.py \
-        --platform linux-x64 \
-        --work $TMPDIR/native-work \
-        --graalvm ${graalvm} \
-        --inside-scope &
-      native_pid=$!
-
-      stdbuf -oL -eL tail -n +1 -F --pid="$native_pid" "$TMPDIR/native-work/build.log" &
-      tail_pid=$!
-
-      status=0
-      wait "$native_pid" || status=$?
-      wait "$tail_pid" || true
-
-      if (( status != 0 )); then
-        exit "$status"
-      fi
-    }
-
-    run_native_image
+      :desktopApp:createReleaseDistributable
 
     runHook postBuild
   '';
@@ -277,14 +222,11 @@ pkgs.stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/bin $out/opt/metrolist/lib/native \
+    mkdir -p $out/bin $out/opt/metrolist \
       $out/share/applications \
       $out/share/icons/hicolor/512x512/apps
 
-    cp -a $TMPDIR/native-work/image/. $out/opt/metrolist/lib/native/
-    ln -s lib/native/resources $out/opt/metrolist/resources
-    install -Dm755 scripts/desktop-native-image/linux-launcher.sh \
-      $out/opt/metrolist/bin/Metrolist
+    cp -a desktopApp/build/compose/binaries/main-release/app/Metrolist/. $out/opt/metrolist/
 
     install -Dm644 desktopApp/src/desktopMain/resources/logo.png \
       $out/share/icons/hicolor/512x512/apps/metrolist.png
@@ -302,6 +244,10 @@ pkgs.stdenv.mkDerivation {
     MimeType=x-scheme-handler/metrolist;x-scheme-handler/metrolist-auth;
     EOF
 
+    runHook postInstall
+  '';
+
+  postFixup = ''
     makeWrapper $out/opt/metrolist/bin/Metrolist $out/bin/metrolist \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath runtimeLibs} \
       --prefix PATH : ${
@@ -310,15 +256,16 @@ pkgs.stdenv.mkDerivation {
           pkgs.gnused
         ]
       } \
-      --set-default GIO_EXTRA_MODULES ${pkgs.glib-networking}/lib/gio/modules
-
-    runHook postInstall
+      --set-default GIO_EXTRA_MODULES ${pkgs.glib-networking}/lib/gio/modules \
+      --set GDK_PIXBUF_MODULE_FILE ${pkgs.gdk-pixbuf}/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache \
+      --set GSETTINGS_SCHEMA_DIR ${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}/glib-2.0/schemas \
+      --prefix XDG_DATA_DIRS : ${pkgs.gtk3}/share
   '';
 
   passthru.gradleDeps = gradleDeps;
 
   meta = {
-    description = "YouTube Music desktop client (GraalVM native image)";
+    description = "YouTube Music desktop client (JVM)";
     homepage = "https://github.com/MetrolistGroup/Metrolist";
     license = lib.licenses.gpl3Only;
     mainProgram = "metrolist";
