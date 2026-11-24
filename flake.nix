@@ -44,6 +44,7 @@
           ];
       };
 
+      mkAppImage = pkgs.callPackage ./packages/mk-appimage.nix { };
       mkPrebuilt = pkgs.callPackage ./packages/mk-prebuilt.nix { };
       mkProtonCachyos = pkgs.callPackage ./packages/mk-proton-cachyos.nix { };
       optimization = pkgs.callPackage ./packages/optimization.nix { };
@@ -108,6 +109,11 @@
           baseUrl = "https://github.com/github/copilot-cli/releases/download";
           binName = "copilot";
           urlTemplate = "${baseUrl}/v{version}/copilot-linux-x64.tar.gz";
+        };
+        "ghost-downloader" = rec {
+          baseUrl = "https://github.com/XiaoYouChR/Ghost-Downloader-3/releases/download";
+          binName = "ghost-downloader";
+          urlTemplate = "${baseUrl}/v{version}/Ghost-Downloader-v{version}-Linux-x86_64.tar.xz";
         };
         "herdr-app" = rec {
           baseUrl = "https://releases.herdr.dev/app";
@@ -401,6 +407,7 @@
         (builtins.mapAttrs (
           name: meta:
           pkgs.callPackage ./packages/${name}.nix {
+            inherit mkAppImage;
             inherit mkPrebuilt;
             inherit mkProtonCachyos;
             inherit (meta) release urlTemplate;

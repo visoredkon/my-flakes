@@ -1,26 +1,16 @@
 {
   lib,
-  pkgs,
   release,
   urlTemplate,
+  mkAppImage,
   ...
 }:
 
-let
+mkAppImage {
   pname = "openchamber-desktop";
-  inherit (release) version;
+  inherit release urlTemplate;
 
-  src = pkgs.fetchurl {
-    inherit (release) sha256;
-    url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
-  };
-
-  appimageContents = pkgs.appimageTools.extract { inherit pname version src; };
-in
-pkgs.appimageTools.wrapType2 {
-  inherit pname version src;
-
-  extraInstallCommands = ''
+  installCommands = appimageContents: ''
     install -m 444 -D ${appimageContents}/openchamber.desktop $out/share/applications/openchamber-desktop.desktop
     if [ -e ${appimageContents}/openchamber.svg ]; then
       install -m 444 -D ${appimageContents}/openchamber.svg $out/share/icons/hicolor/scalable/apps/openchamber-desktop.svg

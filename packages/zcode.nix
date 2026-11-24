@@ -1,26 +1,16 @@
 {
   lib,
-  pkgs,
   release,
   urlTemplate,
+  mkAppImage,
   ...
 }:
 
-let
+mkAppImage {
   pname = "zcode";
-  inherit (release) version;
+  inherit release urlTemplate;
 
-  src = pkgs.fetchurl {
-    inherit (release) sha256;
-    url = builtins.replaceStrings [ "{version}" ] [ release.version ] urlTemplate;
-  };
-
-  appimageContents = pkgs.appimageTools.extract { inherit pname version src; };
-in
-pkgs.appimageTools.wrapType2 {
-  inherit pname version src;
-
-  extraInstallCommands = ''
+  installCommands = appimageContents: ''
     install -m 444 -D ${appimageContents}/zcode.desktop $out/share/applications/zcode.desktop
 
     install -m 444 -D ${appimageContents}/zcode.png \

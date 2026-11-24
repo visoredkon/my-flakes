@@ -11,6 +11,16 @@ nix run .#update-release        # Update all packages
 nix flake check                 # Validate formatting
 ```
 
+## Ghost Downloader
+
+`ghost-downloader` wraps the upstream Nuitka Linux tarball. Notes:
+
+- The app is updated through this flake; its in-app self-updater is not available in the Nix store.
+- FFmpeg, N_m3u8DL-RE, yt-dlp, and QuickJS (quickjs-ng) are bundled and detected automatically.
+- yt-dlp is pinned to a release newer than the one in nixpkgs, because older builds fail YouTube's JavaScript challenges.
+- Kelpie/eD2k is not bundled; install it from the app's setup if needed.
+- The wrapper synchronizes feature packs and refreshes the desktop, autostart, D-Bus, and `ghd` launchers the app writes under `$HOME`.
+
 ## Binary Cache
 
 Prebuilt packages are available from Cachix:
