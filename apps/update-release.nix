@@ -335,8 +335,11 @@ pkgs.writeShellApplication {
       pvetui)
         echo "rev sourceSha256 vendorHash version"
         ;;
-      elephant | tuios)
+      elephant)
         echo "rev sourceSha256 vendorHash"
+        ;;
+      tuios)
+        echo "rev sourceSha256 vendorHash version"
         ;;
       libfprint | waybar)
         echo "rev sourceSha256"
@@ -1042,13 +1045,27 @@ pkgs.writeShellApplication {
     update_branch_package() {
       local pkg="$1"
       releaseFile="releases/$pkg.nix"
+      local releaseMode ref
       repoOwner=$(jq -r --arg pkg "$pkg" '.[$pkg].owner' <<<"$branchSources")
       repoName=$(jq -r --arg pkg "$pkg" '.[$pkg].repo' <<<"$branchSources")
-      branch=$(jq -r --arg pkg "$pkg" '.[$pkg].branch' <<<"$branchSources")
+      releaseMode=$(jq -r --arg pkg "$pkg" '.[$pkg].release // false' <<<"$branchSources")
 
-      echo "check branch package $pkg ($repoOwner/$repoName@$branch)" >&2
+      if [[ "$releaseMode" == "true" ]]; then
+        ref=$(gh api "repos/$repoOwner/$repoName/releases/latest" --jq '.tag_name' || true)
 
-      rev=$(gh api "repos/$repoOwner/$repoName/commits/$branch" --jq '.sha' || true)
+        if [[ -z "$ref" || "$ref" == "null" ]]; then
+          add_failure "$pkg" "failed to determine latest release tag via gh api"
+          return 1
+        fi
+
+        version="''${ref#v}"
+      else
+        ref=$(jq -r --arg pkg "$pkg" '.[$pkg].branch' <<<"$branchSources")
+      fi
+
+      echo "check branch package $pkg ($repoOwner/$repoName@$ref)" >&2
+
+      rev=$(gh api "repos/$repoOwner/$repoName/commits/$ref" --jq '.sha' || true)
 
       if [[ -z "$rev" ]]; then
         add_failure "$pkg" "failed to determine rev via gh api"
@@ -1056,18 +1073,32 @@ pkgs.writeShellApplication {
       fi
 
       current_rev=$(release_field_value "$releaseFile" "rev")
+      current_version=""
+
+      if [[ "$releaseMode" == "true" ]]; then
+        current_version=$(release_field_value "$releaseFile" "version")
+      fi
 
       if [[ "$current_rev" == "$rev" ]]; then
         if ! validate_release_file "$pkg" "$releaseFile"; then
           return 1
         fi
 
-        echo "$pkg already on $rev" >&2
-        record_uptodate "$rev"
+        if [[ "$releaseMode" == "true" ]]; then
+          echo "$pkg already on $version" >&2
+          record_uptodate "$version"
+        else
+          echo "$pkg already on $rev" >&2
+          record_uptodate "$rev"
+        fi
         return 0
       fi
 
-      echo "$pkg: $(display_version "$current_rev") -> $(short_rev "$rev")" >&2
+      if [[ "$releaseMode" == "true" ]]; then
+        echo "$pkg: $(display_version "$current_version") -> $version" >&2
+      else
+        echo "$pkg: $(display_version "$current_rev") -> $(short_rev "$rev")" >&2
+      fi
 
       sourceUrl="https://github.com/$repoOwner/$repoName/archive/$rev.tar.gz"
       sourceSha=""
@@ -1110,7 +1141,12 @@ pkgs.writeShellApplication {
       esac
 
       rm -f "$release_backup"
-      record_update "$current_rev" "$rev"
+
+      if [[ "$releaseMode" == "true" ]]; then
+        record_update "$current_version" "$version"
+      else
+        record_update "$current_rev" "$rev"
+      fi
     }
 
     meta='${metaJson}'

@@ -9,9 +9,7 @@ optimization.withGoOptimizations {
   goBuilder = pkgs.buildGoModule;
 
   pname = "tuios";
-  inherit (release) vendorHash;
-
-  version = pkgs.lib.substring 0 7 release.rev;
+  inherit (release) vendorHash version;
 
   src = pkgs.fetchFromGitHub {
     owner = "Gaurav-Gosain";
@@ -40,7 +38,7 @@ optimization.withGoOptimizations {
   '';
 
   ldflags = [
-    "-X main.version=dev-${pkgs.lib.substring 0 7 release.rev}"
+    "-X main.version=${release.version}"
     "-X main.builtBy=nix"
   ];
 

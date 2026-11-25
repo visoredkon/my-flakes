@@ -443,7 +443,7 @@
         "tuios" = {
           owner = "Gaurav-Gosain";
           repo = "tuios";
-          branch = "main";
+          release = true;
         };
 
         "waybar" = {
